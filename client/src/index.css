@@ -22,10 +22,15 @@
 
 body {
   font-family: 'Outfit', sans-serif;
+  background: var(--bg-dark); /* Fallback */
   background: var(--bg-gradient);
   background-attachment: fixed;
+  background-size: cover;
   color: var(--text-light);
+  margin: 0;
+  padding: 0;
   min-height: 100vh;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
 }

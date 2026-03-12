@@ -233,18 +233,42 @@ export default function PresenterDashboard() {
     }
   };
 
-  const playNextSong = () => {
-    const unplayed = playlist.tracks.filter(t => !playedSongs.some(ps => ps.id === t.id));
-    if (unplayed.length === 0) return alert("No more songs in the playlist!");
+  const playNextSong = async () => {
+    if (!playlist) return;
+    const remaining = playlist.tracks.filter(t => !playedSongs.find(ps => ps.id === t.id));
+    if (remaining.length === 0) return alert('No more songs in playlist!');
 
-    const nextSong = unplayed[Math.floor(Math.random() * unplayed.length)];
-    setPlayedSongs([...playedSongs, nextSong]);
-    setCurrentSong(nextSong);
-    socket.emit('playNextSong', { roomId, song: nextSong });
+    const randomTrack = remaining[Math.floor(Math.random() * remaining.length)];
+    setCurrentSong(randomTrack);
+    setPlayedSongs(prev => [...prev, randomTrack]);
+    socket.emit('playNextSong', { roomId, song: randomTrack });
 
-    // Try to play full track via SDK, otherwise we'll fall back to 30s preview in the UI
-    if (spotifyToken && deviceId && nextSong.uri) {
-      playSongOnSpotify(nextSong.uri);
+    // --- PLAYBACK LOGIC ---
+    
+    // 1. If we have the Web Playback SDK connected (Desktop)
+    if (deviceId && spotifyToken !== 'skipped') {
+      await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ uris: [randomTrack.uri] }),
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${spotifyToken}` },
+      });
+    } 
+    // 2. If we are on Mobile/No SDK but have Premium Token (Remote Control)
+    else if (!deviceId && spotifyToken && spotifyToken !== 'skipped') {
+       try {
+         // Try to play on whatever device is currently active (e.g. the Spotify App on the phone)
+         const res = await fetch(`https://api.spotify.com/v1/me/player/play`, {
+           method: 'PUT',
+           body: JSON.stringify({ uris: [randomTrack.uri] }),
+           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${spotifyToken}` },
+         });
+         
+         if (res.status === 404) {
+           console.log('No active Spotify device found for remote control.');
+         }
+       } catch (e) {
+         console.error('Remote playback failed:', e);
+       }
     }
   };
 
@@ -254,15 +278,15 @@ export default function PresenterDashboard() {
         <h2>Host a Game</h2>
         {error && <div style={{ color: '#ff4d4d', marginBottom: '1rem' }}>{error}</div>}
         <p style={{ margin: '2rem 0', color: 'var(--text-muted)' }}>
-          To play full songs during the game, you need to log in with a Spotify Premium account. 
-          If you don't have one, you can skip this, but you will only get 30-second previews.
+          Para reproducir las canciones enteras durante el juego, necesitas iniciar sesión con una cuenta de Spotify Premium. 
+          Si no tienes, puedes saltar este paso, pero solo se escucharán fragmentos de 30 segundos de las canciones.
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
           <button onClick={handleSpotifyLogin} style={{ background: '#1DB954' }}>
-            Log in with Spotify Premium
+            Iniciar sesión con Spotify Premium
           </button>
           <button className="secondary" onClick={() => setSpotifyToken('skipped')}>
-            Continue without Premium (30s Previews only)
+            Continuar sin Premium (solo Previews 30s)
           </button>
         </div>
       </div>
