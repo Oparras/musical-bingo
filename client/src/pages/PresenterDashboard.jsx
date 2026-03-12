@@ -49,7 +49,10 @@ export default function PresenterDashboard() {
   const [playedSongs, setPlayedSongs] = useState([]);
   const [currentSong, setCurrentSong] = useState(null);
   const [winner, setWinner] = useState(null);
-  const [hideSongInfo, setHideSongInfo] = useState(false); // Mode to hide info when projecting
+  const [hideSongInfo, setHideSongInfo] = useState(false);
+  const [presenterAuth, setPresenterAuth] = useState(false); // Exclusive access
+  const [authInput, setAuthInput] = useState('');
+ // Mode to hide info when projecting
 
   // --- SPOTIFY PKCE AUTH FLOW ---
   useEffect(() => {
@@ -268,6 +271,39 @@ export default function PresenterDashboard() {
       console.error('Playback command failed:', e);
     }
   };
+
+  // --- PRIVATE ACCESS GATE ---
+  if (!presenterAuth && !window.localStorage.getItem('presenter_verified')) {
+    const handleAuth = (e) => {
+      e.preventDefault();
+      if (authInput === '300395') {
+        setPresenterAuth(true);
+        window.localStorage.setItem('presenter_verified', 'true');
+      } else {
+        alert('Código incorrecto. Acceso denegado.');
+      }
+    };
+
+    return (
+      <div className="glass-panel" style={{ maxWidth: '400px', margin: '20vh auto', textAlign: 'center' }}>
+        <h2 style={{ marginBottom: '1.5rem' }}>🔐 Acceso Privado</h2>
+        <p style={{ color: 'var(--text-muted)', marginBottom: '2rem', fontSize: '0.9rem' }}>
+          Solo el personal autorizado puede crear salas de Bingo. Introduzca el código de Maestro de Ceremonias.
+        </p>
+        <form onSubmit={handleAuth}>
+          <input 
+            type="password" 
+            placeholder="Código de acceso" 
+            value={authInput}
+            onChange={(e) => setAuthInput(e.target.value)}
+            style={{ textAlign: 'center', fontSize: '1.5rem', letterSpacing: '5px', marginBottom: '1.5rem' }}
+          />
+          <button type="submit" style={{ width: '100%' }}>Verificar Identidad</button>
+          <button className="secondary" onClick={() => navigate('/')} style={{ width: '100%', marginTop: '10px' }}>Volver</button>
+        </form>
+      </div>
+    );
+  }
 
   if (!spotifyToken) {
     return (
