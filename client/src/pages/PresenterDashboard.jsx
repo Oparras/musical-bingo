@@ -245,30 +245,26 @@ export default function PresenterDashboard() {
 
     // --- PLAYBACK LOGIC ---
     
-    // 1. If we have the Web Playback SDK connected (Desktop)
-    if (deviceId && spotifyToken !== 'skipped') {
-      await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
-        method: 'PUT',
-        body: JSON.stringify({ uris: [randomTrack.uri] }),
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${spotifyToken}` },
-      });
-    } 
-    // 2. If we are on Mobile/No SDK but have Premium Token (Remote Control)
-    else if (!deviceId && spotifyToken && spotifyToken !== 'skipped') {
-       try {
-         // Try to play on whatever device is currently active (e.g. the Spotify App on the phone)
-         const res = await fetch(`https://api.spotify.com/v1/me/player/play`, {
-           method: 'PUT',
-           body: JSON.stringify({ uris: [randomTrack.uri] }),
-           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${spotifyToken}` },
-         });
-         
-         if (res.status === 404) {
-           console.log('No active Spotify device found for remote control.');
-         }
-       } catch (e) {
-         console.error('Remote playback failed:', e);
-       }
+    // We attempt remote playback, but we won't block the UI.
+    try {
+      const playEndpoint = deviceId 
+        ? `https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`
+        : `https://api.spotify.com/v1/me/player/play`;
+
+      if (spotifyToken && spotifyToken !== 'skipped') {
+        const res = await fetch(playEndpoint, {
+          method: 'PUT',
+          body: JSON.stringify({ uris: [randomTrack.uri] }),
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${spotifyToken}` },
+        });
+
+        if (res.status === 404) {
+          console.warn('No active Spotify device found. Ensure Spotify app is open.');
+          // If remote play fails, we'll let the fallback 30s audio player show up in the UI
+        }
+      }
+    } catch (e) {
+      console.error('Playback command failed:', e);
     }
   };
 
@@ -372,20 +368,34 @@ export default function PresenterDashboard() {
                 <p style={{ color: 'var(--text-muted)', fontSize: isMobile ? '0.9rem' : '1.2rem', marginBottom: '0.5rem' }}>{currentSong.artist}</p>
                 
                 {/* 
-                  Audio player: always shows if there's a previewUrl and no Premium SDK. 
-                  On mobile, autoPlay is blocked by browsers so we show controls always.
-                  The user can press play manually.
+                  Mantenemos el reproductor de 30s como fallback SIEMPRE en móvil o si no hay SDK activo.
                 */}
-                {(!deviceId || spotifyToken === 'skipped') && currentSong.previewUrl && (
-                  <audio key={currentSong.id} controls src={currentSong.previewUrl} autoPlay style={{ marginTop: '12px', width: '100%', maxWidth: '340px' }} />
-                )}
-                {(!deviceId || spotifyToken === 'skipped') && !currentSong.previewUrl && (
-                  <div style={{ color: '#ff8a00', marginTop: '10px', textAlign: 'center', fontSize: '0.85rem' }}>
-                    ⚠️ No hay preview de 30s en Spotify. Usa Spotify Premium para reproducción completa.
+                {currentSong.previewUrl && (
+                  <div style={{ width: '100%', maxWidth: '340px', marginTop: '12px' }}>
+                    <audio key={currentSong.id} controls src={currentSong.previewUrl} autoPlay style={{ width: '100%' }} />
+                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '5px' }}>
+                      {spotifyToken !== 'skipped' ? '💡 Sonando preview de 30s. Si tienes Spotify abierto, debería cambiar allí.' : '🔊 Sonando preview de 30s.'}
+                    </p>
                   </div>
                 )}
-                {deviceId && spotifyToken !== 'skipped' && (
-                  <div style={{ color: '#1DB954', marginTop: '10px', fontSize: '0.85rem' }}>🟢 Reproduciendo en Spotify Premium...</div>
+
+                {(!currentSong.previewUrl && (!deviceId || spotifyToken === 'skipped')) && (
+                  <div style={{ color: '#ff8a00', marginTop: '10px', textAlign: 'center', fontSize: '0.85rem' }}>
+                    ⚠️ No hay preview disponible.
+                  </div>
+                )}
+                
+                {spotifyToken && spotifyToken !== 'skipped' && (
+                  <div style={{ marginTop: '15px', padding: '10px', background: 'rgba(29, 185, 84, 0.1)', borderRadius: '10px', width: '100%' }}>
+                    <div style={{ color: '#1DB954', fontSize: '0.85rem', fontWeight: 'bold' }}>
+                      {deviceId ? '🟢 Reproduciendo en este navegador' : '📱 Intentando control remoto...'}
+                    </div>
+                    {!deviceId && (
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '5px' }}>
+                        Si no cambia la canción, abre la App de Spotify en tu móvil y dale al Play.
+                      </p>
+                    )}
+                  </div>
                 )}
               </>
             ) : (
