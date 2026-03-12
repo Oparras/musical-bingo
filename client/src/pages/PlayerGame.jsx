@@ -78,13 +78,13 @@ export default function PlayerGame() {
 
   if (gameState === 'PLAYING') {
     return (
-      <div style={{ maxWidth: '600px', margin: '0 auto', padding: '10px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-          <h3 style={{ color: 'var(--text-muted)', margin: 0 }}>
-            Room: {roomId}
+      <div style={{ maxWidth: '600px', margin: '0 auto', padding: '8px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+          <h3 style={{ color: 'var(--text-muted)', margin: 0, fontSize: 'clamp(0.8rem, 3vw, 1.1rem)' }}>
+            Sala: {roomId}
           </h3>
-          <div style={{ color: 'var(--accent-color)', fontWeight: 'bold' }}>
-            {markedIndexes.size} / 16 Marked
+          <div style={{ color: 'var(--accent-color)', fontWeight: 'bold', fontSize: 'clamp(0.8rem, 3vw, 1rem)' }}>
+            {markedIndexes.size} / 16 ✓
           </div>
         </div>
         
@@ -92,8 +92,8 @@ export default function PlayerGame() {
         <div style={{ 
           display: 'grid', 
           gridTemplateColumns: 'repeat(4, 1fr)', 
-          gap: '8px', 
-          marginBottom: '2rem' 
+          gap: 'clamp(4px, 1.5vw, 10px)', 
+          marginBottom: '0.75rem' 
         }}>
           {card.map((song, i) => {
             const isMarked = markedIndexes.has(i);
@@ -105,30 +105,31 @@ export default function PlayerGame() {
                   aspectRatio: '1',
                   background: isMarked ? 'linear-gradient(135deg, var(--primary-color), var(--secondary-color))' : 'var(--glass-bg)',
                   border: isMarked ? 'none' : '1px solid var(--glass-border)',
-                  borderRadius: '12px',
+                  borderRadius: 'clamp(6px, 2vw, 12px)',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  padding: '4px',
+                  padding: 'clamp(3px, 1vw, 8px)',
                   cursor: 'pointer',
                   transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
                   transform: isMarked ? 'scale(0.95)' : 'scale(1)',
                   boxShadow: isMarked ? '0 5px 15px rgba(106, 17, 203, 0.4)' : 'var(--glass-shadow)',
                   textAlign: 'center',
                   overflow: 'hidden',
-                  position: 'relative'
+                  position: 'relative',
+                  userSelect: 'none',
+                  WebkitTapHighlightColor: 'transparent',
                 }}
               >
-                {/* Fallback to text if No Image logic */}
                 {song.imageUrl && !isMarked && (
-                  <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundImage: `url(${song.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center', opacity: 0.15, borderRadius: '12px' }} />
+                  <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundImage: `url(${song.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center', opacity: 0.15, borderRadius: 'inherit' }} />
                 )}
                 
-                <div style={{ fontSize: 'min(3.5vw, 0.8rem)', fontWeight: '800', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', zIndex: 1, textShadow: isMarked ? '0 1px 2px rgba(0,0,0,0.5)' : 'none' }}>
+                <div style={{ fontSize: 'clamp(0.55rem, 2.5vw, 0.8rem)', fontWeight: '800', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', zIndex: 1, textShadow: isMarked ? '0 1px 2px rgba(0,0,0,0.5)' : 'none', lineHeight: 1.2 }}>
                   {song.name}
                 </div>
-                <div style={{ fontSize: 'min(2.8vw, 0.65rem)', color: isMarked ? 'rgba(255,255,255,0.8)' : 'var(--text-muted)', marginTop: '4px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', width: '100%', zIndex: 1, fontWeight: '300' }}>
+                <div style={{ fontSize: 'clamp(0.45rem, 2vw, 0.65rem)', color: isMarked ? 'rgba(255,255,255,0.8)' : 'var(--text-muted)', marginTop: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', width: '100%', zIndex: 1, fontWeight: '300' }}>
                   {song.artist}
                 </div>
               </div>
@@ -138,9 +139,9 @@ export default function PlayerGame() {
 
         <button 
           onClick={claimBingo}
-          style={{ width: '100%', padding: '20px', fontSize: '2rem', background: 'linear-gradient(90deg, #ff007f, #ff8a00)', borderRadius: '20px', boxShadow: '0 10px 30px rgba(255, 0, 127, 0.4)' }}
+          style={{ width: '100%', padding: 'clamp(14px, 4vw, 20px)', fontSize: 'clamp(1.3rem, 5vw, 2rem)', background: 'linear-gradient(90deg, #ff007f, #ff8a00)', borderRadius: '20px', boxShadow: '0 10px 30px rgba(255, 0, 127, 0.4)', WebkitTapHighlightColor: 'transparent' }}
         >
-          BINGO!
+          🎉 ¡BINGO!
         </button>
       </div>
     );

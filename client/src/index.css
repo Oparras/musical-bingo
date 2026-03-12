@@ -116,3 +116,23 @@ input:focus {
 input::placeholder {
   color: var(--text-muted);
 }
+
+/* ===== MOBILE RESPONSIVE ===== */
+@media (max-width: 768px) {
+  .app-container {
+    padding: 1rem;
+  }
+
+  .glass-panel {
+    padding: 1.25rem;
+    border-radius: 15px;
+  }
+
+  h1 { font-size: 2rem; }
+  h2 { font-size: 1.5rem; }
+
+  button {
+    font-size: 1rem;
+    padding: 10px 22px;
+  }
+}
