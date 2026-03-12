@@ -429,12 +429,16 @@ export default function PresenterDashboard() {
             <div style={{ fontSize: '3.5rem', fontWeight: '800', color: 'white', letterSpacing: '5px' }}>{roomId}</div>
           </div>
           
-          <h3 style={{ flexShrink: 0, fontSize: isMobile ? '0.9rem' : undefined }}>Historial ({playedSongs.length})</h3>
+          <h3 style={{ flexShrink: 0, fontSize: isMobile ? '0.9rem' : undefined }}>
+            {hideSongInfo ? 'Historial (Oculto)' : `Historial (${playedSongs.length})`}
+          </h3>
           <div style={{ flex: 1, overflowY: 'auto', background: 'var(--glass-bg)', borderRadius: '10px', padding: '8px', minHeight: 0 }}>
             {playedSongs.slice().reverse().map((song, i) => (
-              <div key={i} style={{ padding: '8px 10px', borderBottom: '1px solid var(--glass-border)', fontSize: '0.9rem', opacity: hideSongInfo && i === 0 ? 0.3 : 1 }}>
-                {hideSongInfo && i === 0 ? (
-                  <strong>Canción actual (Oculta)</strong>
+              <div key={i} style={{ padding: '8px 10px', borderBottom: '1px solid var(--glass-border)', fontSize: '0.9rem', opacity: hideSongInfo ? 0.3 : 1 }}>
+                {hideSongInfo ? (
+                  <div style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                    Canción #{playedSongs.length - i} (Oculta)
+                  </div>
                 ) : (
                   <>
                     <strong>{song.name}</strong>
