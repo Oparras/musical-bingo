@@ -26,12 +26,25 @@ function generateBingoCard(playlist, size = 16) {
   }));
 }
 
-function checkBingo(card, playedSongs) {
-  const gridSize = 4; // Assuming 4x4
-  const isMarked = (index) => {
-    const songId = card[index].songId;
-    return playedSongs.includes(songId); 
-  };
+function checkBingo(card, playedSongs, markedIndexes) {
+  const gridSize = 4; 
+  
+  // 1. Check if any marked songs haven't actually been played
+  const invalidIndexes = markedIndexes.filter(idx => {
+    const songId = card[idx].songId;
+    return !playedSongs.includes(songId);
+  });
+
+  if (invalidIndexes.length > 0) {
+    return { 
+      success: false, 
+      reason: 'INVALID_MARKS', 
+      invalidIndexes 
+    };
+  }
+
+  // 2. Check for bingo patterns using ONLY the marked indexes
+  const isMarked = (idx) => markedIndexes.includes(idx);
 
   // Check rows
   for (let r = 0; r < gridSize; r++) {
@@ -39,7 +52,7 @@ function checkBingo(card, playedSongs) {
     for (let c = 0; c < gridSize; c++) {
       if (!isMarked(r * gridSize + c)) rowBingo = false;
     }
-    if (rowBingo) return true;
+    if (rowBingo) return { success: true };
   }
 
   // Check cols
@@ -48,7 +61,7 @@ function checkBingo(card, playedSongs) {
     for (let r = 0; r < gridSize; r++) {
       if (!isMarked(r * gridSize + c)) colBingo = false;
     }
-    if (colBingo) return true;
+    if (colBingo) return { success: true };
   }
 
   // Check diagonals
@@ -59,9 +72,9 @@ function checkBingo(card, playedSongs) {
     if (!isMarked(i * gridSize + (gridSize - 1 - i))) diag2Bingo = false;
   }
   
-  if (diag1Bingo || diag2Bingo) return true;
+  if (diag1Bingo || diag2Bingo) return { success: true };
 
-  return false;
+  return { success: false, reason: 'INCOMPLETE' };
 }
 
 module.exports = {

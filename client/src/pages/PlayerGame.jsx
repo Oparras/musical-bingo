@@ -25,8 +25,19 @@ export default function PlayerGame() {
       setGameState('GAME_OVER');
     });
     
-    socket.on('bingoFalseAlarm', () => {
-      alert("Oops! Your BINGO is invalid. You missed a song! Or maybe it hasn't played yet.");
+    socket.on('bingoInvalid', ({ reason, invalidIndexes }) => {
+      if (reason === 'INVALID_MARKS') {
+        alert("¡Cuidado! Has marcado canciones que aún no han sonado. Se van a desmarcar.");
+        if (invalidIndexes && invalidIndexes.length > 0) {
+          setMarkedIndexes(prev => {
+            const next = new Set(prev);
+            invalidIndexes.forEach(idx => next.delete(idx));
+            return next;
+          });
+        }
+      } else {
+        alert("¡Todavía no tienes Bingo! Revisa bien tu cartón y sigue jugando.");
+      }
     });
 
     socket.on('roomDestroyed', () => {
@@ -56,10 +67,10 @@ export default function PlayerGame() {
 
   const claimBingo = () => {
     if (markedIndexes.size < 4) {
-      alert("You need to mark at least 4 songs to call BINGO!");
+      alert("¡Necesitas marcar al menos 4 canciones para cantar Bingo!");
       return;
     }
-    socket.emit('claimBingo', { roomId }); 
+    socket.emit('claimBingo', { roomId, markedIndexes: Array.from(markedIndexes) }); 
   };
 
   if (gameState === 'WAITING') {

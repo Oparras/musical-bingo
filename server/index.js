@@ -103,20 +103,25 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('playerJoined', { player: result.player, players: result.room.players });
   });
 
-  socket.on('claimBingo', ({ roomId }) => {
+  socket.on('claimBingo', ({ roomId, markedIndexes }) => {
     const room = gameManager.getRoom(roomId);
     if (!room) return;
 
     const player = room.players.find(p => p.socketId === socket.id);
     if (!player) return;
 
-    const isBingoValid = checkBingo(player.card, room.playedSongs);
+    // Default to empty array if not provided
+    const marks = markedIndexes || [];
+    const result = checkBingo(player.card, room.playedSongs, marks);
 
-    if (isBingoValid) {
+    if (result.success) {
       room.status = 'FINISHED';
       io.to(roomId).emit('bingoWinner', { player });
     } else {
-      socket.emit('bingoFalseAlarm');
+      socket.emit('bingoInvalid', { 
+        reason: result.reason, 
+        invalidIndexes: result.invalidIndexes 
+      });
     }
   });
 
