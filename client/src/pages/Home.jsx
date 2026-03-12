@@ -15,9 +15,17 @@ export default function Home() {
     }}>
       <h1 className="text-gradient" style={{ 
         fontSize: isMobile ? '2.5rem' : '4.5rem', 
-        marginBottom: '10px', 
+        marginBottom: '0', 
         letterSpacing: '1px' 
       }}>🎵 Musical Bingo</h1>
+      <p style={{ 
+        fontSize: '0.8rem', 
+        color: 'var(--text-muted)', 
+        fontStyle: 'italic', 
+        marginBottom: '20px',
+        opacity: 0.6
+      }}>by parritas</p>
+      
       <p style={{ 
         marginBottom: isMobile ? '2rem' : '3.5rem', 
         color: 'var(--text-muted)', 
