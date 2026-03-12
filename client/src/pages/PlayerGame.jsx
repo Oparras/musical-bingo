@@ -24,8 +24,12 @@ export default function PlayerGame() {
       setWinner(player);
       setGameState('GAME_OVER');
     });
+
+    socket.on('lineWinner', ({ player }) => {
+      alert(`¡LÍNEA! 📣 ${player.name} ha cantado línea. ¡Seguimos para Bingo!`);
+    });
     
-    socket.on('bingoInvalid', ({ reason, invalidIndexes }) => {
+    socket.on('winInvalid', ({ reason, invalidIndexes, type }) => {
       if (reason === 'INVALID_MARKS') {
         alert("¡Cuidado! Has marcado canciones que aún no han sonado. Se van a desmarcar.");
         if (invalidIndexes && invalidIndexes.length > 0) {
@@ -36,7 +40,10 @@ export default function PlayerGame() {
           });
         }
       } else {
-        alert("¡Todavía no tienes Bingo! Revisa bien tu cartón y sigue jugando.");
+        const msg = type === 'BINGO' 
+          ? "¡Todavía no tienes el cartón completo! Sigue jugando para el Bingo."
+          : "¡Todavía no tienes una línea completa! Revisa bien tu cartón.";
+        alert(msg);
       }
     });
 
@@ -48,7 +55,8 @@ export default function PlayerGame() {
     return () => {
       socket.off('gameStarted');
       socket.off('bingoWinner');
-      socket.off('bingoFalseAlarm');
+      socket.off('lineWinner');
+      socket.off('winInvalid');
       socket.off('roomDestroyed');
     };
   }, [socket, navigate]);
@@ -65,12 +73,20 @@ export default function PlayerGame() {
     setMarkedIndexes(newSet);
   };
 
-  const claimBingo = () => {
+  const claimLine = () => {
     if (markedIndexes.size < 4) {
-      alert("¡Necesitas marcar al menos 4 canciones para cantar Bingo!");
+      alert("¡Necesitas marcar al menos 4 canciones!");
       return;
     }
-    socket.emit('claimBingo', { roomId, markedIndexes: Array.from(markedIndexes) }); 
+    socket.emit('claimWin', { roomId, markedIndexes: Array.from(markedIndexes), type: 'LINE' }); 
+  };
+
+  const claimBingo = () => {
+    if (markedIndexes.size < 16) {
+      alert("¡Necesitas tener el cartón completo (16 canciones) para cantar Bingo!");
+      return;
+    }
+    socket.emit('claimWin', { roomId, markedIndexes: Array.from(markedIndexes), type: 'BINGO' }); 
   };
 
   if (gameState === 'WAITING') {
@@ -155,12 +171,20 @@ export default function PlayerGame() {
           })}
         </div>
 
-        <button 
-          onClick={claimBingo}
-          style={{ width: '100%', padding: 'clamp(14px, 4vw, 20px)', fontSize: 'clamp(1.3rem, 5vw, 2rem)', background: 'linear-gradient(90deg, #ff007f, #ff8a00)', borderRadius: '20px', boxShadow: '0 10px 30px rgba(255, 0, 127, 0.4)', WebkitTapHighlightColor: 'transparent' }}
-        >
-          🎉 ¡BINGO!
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button 
+            onClick={claimLine}
+            style={{ flex: 1, padding: '15px', fontSize: '1.2rem', background: 'linear-gradient(90deg, #ff8a00, #e52e71)', borderRadius: '15px', boxShadow: '0 5px 15px rgba(229, 46, 113, 0.3)', WebkitTapHighlightColor: 'transparent' }}
+          >
+            📢 ¡LÍNEA!
+          </button>
+          <button 
+            onClick={claimBingo}
+            style={{ flex: 1.5, padding: '15px', fontSize: '1.2rem', background: 'linear-gradient(90deg, #ff007f, #ff8a00)', borderRadius: '15px', boxShadow: '0 5px 15px rgba(255, 0, 127, 0.3)', WebkitTapHighlightColor: 'transparent' }}
+          >
+            🎉 ¡BINGO!
+          </button>
+        </div>
       </div>
     );
   }
@@ -170,18 +194,18 @@ export default function PlayerGame() {
       <div className="glass-panel" style={{ maxWidth: '500px', margin: '15vh auto', textAlign: 'center' }}>
         {winner?.socketId === socket.id ? (
           <>
-            <h1 style={{ fontSize: '3.5rem', color: 'var(--accent-color)' }}>YOU WIN! 🎉</h1>
-            <p style={{ fontSize: '1.2rem', margin: '1rem 0' }}>Your musical ear is unmatched!</p>
+            <h1 style={{ fontSize: '3.5rem', color: 'var(--accent-color)' }}>¡HAS GANADO! 🎉</h1>
+            <p style={{ fontSize: '1.2rem', margin: '1rem 0' }}>¡Tu oído musical es insuperable!</p>
           </>
         ) : (
           <>
-            <h1 style={{ fontSize: '3rem' }}>GAME OVER</h1>
+            <h1 style={{ fontSize: '3rem' }}>FIN DEL JUEGO</h1>
             <p style={{ fontSize: '1.2rem', margin: '1rem 0', color: 'var(--text-muted)' }}>
-              Winner: <strong className="text-gradient">{winner?.name}</strong>
+              Ganador: <strong className="text-gradient">{winner?.name}</strong>
             </p>
           </>
         )}
-        <button onClick={() => navigate('/')} style={{ marginTop: '2rem', width: '100%' }}>Back to Home</button>
+        <button onClick={() => navigate('/')} style={{ marginTop: '2rem', width: '100%' }}>Volver al Inicio</button>
       </div>
     );
   }

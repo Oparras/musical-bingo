@@ -51,7 +51,7 @@ const io = new Server(server, {
 });
 
 const gameManager = require('./gameManager');
-const { checkBingo } = require('./bingoUtils');
+const { checkWin } = require('./bingoUtils');
 
 io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`);
@@ -103,24 +103,29 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('playerJoined', { player: result.player, players: result.room.players });
   });
 
-  socket.on('claimBingo', ({ roomId, markedIndexes }) => {
+  socket.on('claimWin', ({ roomId, markedIndexes, type }) => {
     const room = gameManager.getRoom(roomId);
     if (!room) return;
 
     const player = room.players.find(p => p.socketId === socket.id);
     if (!player) return;
 
-    // Default to empty array if not provided
     const marks = markedIndexes || [];
-    const result = checkBingo(player.card, room.playedSongs, marks);
+    const result = checkWin(player.card, room.playedSongs, marks, type);
 
     if (result.success) {
-      room.status = 'FINISHED';
-      io.to(roomId).emit('bingoWinner', { player });
+      if (type === 'BINGO') {
+        room.status = 'FINISHED';
+        io.to(roomId).emit('bingoWinner', { player });
+      } else {
+        // Line winner - notify everyone but don't end game
+        io.to(roomId).emit('lineWinner', { player });
+      }
     } else {
-      socket.emit('bingoInvalid', { 
+      socket.emit('winInvalid', { 
         reason: result.reason, 
-        invalidIndexes: result.invalidIndexes 
+        invalidIndexes: result.invalidIndexes,
+        type
       });
     }
   });

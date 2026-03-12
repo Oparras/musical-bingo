@@ -26,7 +26,7 @@ function generateBingoCard(playlist, size = 16) {
   }));
 }
 
-function checkBingo(card, playedSongs, markedIndexes) {
+function checkWin(card, playedSongs, markedIndexes, type) {
   const gridSize = 4; 
   
   // 1. Check if any marked songs haven't actually been played
@@ -43,41 +43,52 @@ function checkBingo(card, playedSongs, markedIndexes) {
     };
   }
 
-  // 2. Check for bingo patterns using ONLY the marked indexes
   const isMarked = (idx) => markedIndexes.includes(idx);
 
-  // Check rows
-  for (let r = 0; r < gridSize; r++) {
-    let rowBingo = true;
-    for (let c = 0; c < gridSize; c++) {
-      if (!isMarked(r * gridSize + c)) rowBingo = false;
+  // 2. Full Card (BINGO)
+  if (type === 'BINGO') {
+    if (markedIndexes.length === 16) {
+      return { success: true };
     }
-    if (rowBingo) return { success: true };
+    return { success: false, reason: 'INCOMPLETE_BINGO' };
   }
 
-  // Check cols
-  for (let c = 0; c < gridSize; c++) {
-    let colBingo = true;
+  // 3. Line (LINE)
+  if (type === 'LINE') {
+    // Check rows
     for (let r = 0; r < gridSize; r++) {
-      if (!isMarked(r * gridSize + c)) colBingo = false;
+      let rowWin = true;
+      for (let c = 0; c < gridSize; c++) {
+        if (!isMarked(r * gridSize + c)) rowWin = false;
+      }
+      if (rowWin) return { success: true };
     }
-    if (colBingo) return { success: true };
+
+    // Check cols
+    for (let c = 0; c < gridSize; c++) {
+      let colWin = true;
+      for (let r = 0; r < gridSize; r++) {
+        if (!isMarked(r * gridSize + c)) colWin = false;
+      }
+      if (colWin) return { success: true };
+    }
+
+    // Check diagonals
+    let diag1Win = true;
+    let diag2Win = true;
+    for (let i = 0; i < gridSize; i++) {
+        if (!isMarked(i * gridSize + i)) diag1Win = false;
+        if (!isMarked(i * gridSize + (gridSize - 1 - i))) diag2Win = false;
+    }
+    if (diag1Win || diag2Win) return { success: true };
+
+    return { success: false, reason: 'INCOMPLETE_LINE' };
   }
 
-  // Check diagonals
-  let diag1Bingo = true;
-  let diag2Bingo = true;
-  for (let i = 0; i < gridSize; i++) {
-    if (!isMarked(i * gridSize + i)) diag1Bingo = false;
-    if (!isMarked(i * gridSize + (gridSize - 1 - i))) diag2Bingo = false;
-  }
-  
-  if (diag1Bingo || diag2Bingo) return { success: true };
-
-  return { success: false, reason: 'INCOMPLETE' };
+  return { success: false, reason: 'UNKNOWN_TYPE' };
 }
 
 module.exports = {
   generateBingoCard,
-  checkBingo
+  checkWin
 };
