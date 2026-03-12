@@ -64,8 +64,15 @@ export default function PlayerGame() {
 
   if (gameState === 'WAITING') {
     return (
-      <div className="glass-panel" style={{ maxWidth: '500px', margin: '20vh auto', textAlign: 'center' }}>
-        <h2>You're in! 🎉</h2>
+      <div className="glass-panel" style={{ maxWidth: '400px', margin: '15vh auto', textAlign: 'center', position: 'relative' }}>
+      <button 
+        className="secondary" 
+        onClick={() => navigate('/')} 
+        style={{ position: 'absolute', top: '10px', right: '10px', padding: '5px 15px', fontSize: '0.8rem' }}
+      >
+        Atrás
+      </button>
+      <h2 style={{ marginBottom: '2rem' }}>You're in! 🎉</h2>
         <p style={{ margin: '2rem 0', color: 'var(--text-muted)', fontSize: '1.2rem' }}>
           Waiting for the Host to start the game...
         </p>

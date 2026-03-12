@@ -42,8 +42,15 @@ export default function PlayerJoin() {
   };
 
   return (
-    <div className="glass-panel" style={{ maxWidth: '400px', margin: '15vh auto', textAlign: 'center' }}>
-      <h2 style={{ marginBottom: '2rem' }}>Join a Game</h2>
+    <div className="glass-panel" style={{ maxWidth: '400px', margin: '15vh auto', textAlign: 'center', position: 'relative' }}>
+      <button 
+        className="secondary" 
+        onClick={() => navigate('/')} 
+        style={{ position: 'absolute', top: '15px', right: '15px', padding: '5px 15px', fontSize: '0.8rem' }}
+      >
+        Atrás
+      </button>
+      <h2 style={{ marginBottom: '2rem' }}>Entrar a una Partida</h2>
       
       {error && <div style={{ color: '#ff4d4d', marginBottom: '1rem', padding: '10px', background: 'rgba(255,0,0,0.1)', borderRadius: '8px' }}>{error}</div>}
 

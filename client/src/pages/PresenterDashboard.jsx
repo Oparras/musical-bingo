@@ -285,6 +285,9 @@ export default function PresenterDashboard() {
           <button className="secondary" onClick={() => setSpotifyToken('skipped')}>
             Continuar sin Premium (solo Previews 30s)
           </button>
+          <button className="secondary" onClick={() => navigate('/')} style={{ marginTop: '10px', opacity: 0.7 }}>
+            🔙 Volver al Inicio
+          </button>
         </div>
       </div>
     );
@@ -292,7 +295,14 @@ export default function PresenterDashboard() {
 
   if (gameState === 'SETUP') {
     return (
-      <div className="glass-panel" style={{ maxWidth: '600px', margin: '10vh auto' }}>
+      <div className="glass-panel" style={{ maxWidth: '600px', margin: '10vh auto', position: 'relative' }}>
+        <button 
+          className="secondary" 
+          onClick={() => navigate('/')} 
+          style={{ position: 'absolute', top: '15px', right: '15px', padding: '5px 15px', fontSize: '0.8rem' }}
+        >
+          Salir
+        </button>
         <h2>Configure Room</h2>
         {playerLoading && <div style={{ color: '#1DB954', marginBottom: '1rem' }}>Initializing Spotify Web Player...</div>}
         {deviceId && <div style={{ color: '#1DB954', marginBottom: '1rem' }}>✓ Spotify Premium Player Ready!</div>}
@@ -319,8 +329,15 @@ export default function PresenterDashboard() {
 
   if (gameState === 'WAITING') {
     return (
-      <div className="glass-panel" style={{ maxWidth: '800px', margin: '5vh auto', textAlign: 'center' }}>
-        <h2 className="text-gradient">Room Details</h2>
+      <div className="glass-panel" style={{ maxWidth: '800px', margin: '5vh auto', textAlign: 'center', position: 'relative' }}>
+        <button 
+          className="secondary" 
+          onClick={() => navigate('/')} 
+          style={{ position: 'absolute', top: '20px', right: '20px', padding: '8px 20px' }}
+        >
+          Abandonar Partida
+        </button>
+        <h2 className="text-gradient">Detalles de la Sala</h2>
         <div style={{ margin: '2rem 0', padding: '2rem', background: 'var(--glass-bg)', borderRadius: '15px' }}>
           <p style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>Players join at URL with PIN:</p>
           <h1 style={{ fontSize: '5rem', letterSpacing: '5px', margin: '10px 0' }}>{roomId}</h1>
@@ -353,14 +370,21 @@ export default function PresenterDashboard() {
         minHeight: 0 
       }}>
         <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h2 style={{ fontSize: isMobile ? '1.2rem' : undefined, margin: 0 }}>🎤 Panel del Presentador</h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '10px' }}>
+            <button 
+              className="secondary" 
+              onClick={() => { if(confirm('¿Seguro que quieres salir? Se cerrará la partida.')) navigate('/') }}
+              style={{ padding: '8px 15px', fontSize: '0.8rem', borderRadius: '10px' }}
+            >
+              🚪 Salir
+            </button>
+            <h2 style={{ fontSize: isMobile ? '1.1rem' : undefined, margin: 0, flex: 1, textAlign: 'center' }}>🎤 Panel</h2>
             <button 
               className="secondary" 
               onClick={() => setHideSongInfo(!hideSongInfo)}
               style={{ padding: '8px 15px', fontSize: '0.8rem', borderRadius: '10px' }}
             >
-              {hideSongInfo ? '👁️ Mostrar Info' : '🙈 Modo Ciego (Ocultar)'}
+              {hideSongInfo ? '👁️ Info' : '🙈 Ciego'}
             </button>
           </div>
           
@@ -461,7 +485,10 @@ export default function PresenterDashboard() {
         <p style={{ margin: '2rem 0', color: 'var(--text-muted)' }}>
           They successfully marked all required songs.
         </p>
-        <button onClick={() => window.location.reload()}>Play Again</button>
+        <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
+          <button onClick={() => window.location.reload()}>Jugar otra vez</button>
+          <button className="secondary" onClick={() => navigate('/')}>Ir al Inicio</button>
+        </div>
       </div>
     );
   }
