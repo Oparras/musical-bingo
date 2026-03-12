@@ -24,7 +24,7 @@ export default function Home() {
         fontStyle: 'italic', 
         marginBottom: '20px',
         opacity: 0.6
-      }}>by parritas</p>
+      }}>by parritas </p>
       
       <p style={{ 
         marginBottom: isMobile ? '2rem' : '3.5rem', 
