@@ -49,6 +49,7 @@ export default function PresenterDashboard() {
   const [playedSongs, setPlayedSongs] = useState([]);
   const [currentSong, setCurrentSong] = useState(null);
   const [winner, setWinner] = useState(null);
+  const [hideSongInfo, setHideSongInfo] = useState(false); // Mode to hide info when projecting
 
   // --- SPOTIFY PKCE AUTH FLOW ---
   useEffect(() => {
@@ -352,64 +353,69 @@ export default function PresenterDashboard() {
         minHeight: 0 
       }}>
         <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
-          <h2 style={{ fontSize: isMobile ? '1.2rem' : undefined }}>🎤 Presenter Controls</h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <h2 style={{ fontSize: isMobile ? '1.2rem' : undefined, margin: 0 }}>🎤 Panel del Presentador</h2>
+            <button 
+              className="secondary" 
+              onClick={() => setHideSongInfo(!hideSongInfo)}
+              style={{ padding: '8px 15px', fontSize: '0.8rem', borderRadius: '10px' }}
+            >
+              {hideSongInfo ? '👁️ Mostrar Info' : '🙈 Modo Ciego (Ocultar)'}
+            </button>
+          </div>
           
-          <div style={{ flex: isMobile ? 'none' : 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--glass-bg)', borderRadius: '15px', padding: '1rem', margin: '1rem 0', overflowY: 'auto' }}>
+          <div style={{ flex: isMobile ? 'none' : 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--glass-bg)', borderRadius: '15px', padding: '1.5rem', margin: '0.5rem 0', overflowY: 'auto' }}>
             {currentSong ? (
               <>
-                <div style={{ width: isMobile ? '140px' : '200px', height: isMobile ? '140px' : '200px', marginBottom: '1rem', borderRadius: '15px', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', flexShrink: 0 }}>
-                  {currentSong.imageUrl ? (
+                <div style={{ width: isMobile ? '140px' : '200px', height: isMobile ? '140px' : '200px', marginBottom: '1rem', borderRadius: '15px', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', flexShrink: 0, position: 'relative' }}>
+                  {hideSongInfo ? (
+                    <div style={{ width: '100%', height: '100%', background: 'linear-gradient(45deg, #1e1b4b, #311936)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '5rem' }}>❓</div>
+                  ) : currentSong.imageUrl ? (
                     <img src={currentSong.imageUrl} alt="Album" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : (
                     <div style={{ width: '100%', height: '100%', background: 'var(--primary-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '3rem' }}>🎵</div>
                   )}
                 </div>
-                <h2 style={{ textAlign: 'center', marginBottom: '5px', fontSize: isMobile ? '1.1rem' : '1.5rem' }}>{currentSong.name}</h2>
-                <p style={{ color: 'var(--text-muted)', fontSize: isMobile ? '0.9rem' : '1.2rem', marginBottom: '0.5rem' }}>{currentSong.artist}</p>
+
+                <div style={{ textAlign: 'center', minHeight: '80px' }}>
+                  {hideSongInfo ? (
+                    <>
+                      <h2 style={{ marginBottom: '5px', fontSize: isMobile ? '1.5rem' : '2.2rem', color: 'var(--accent-color)' }}>¡Adivina la canción! 🎧</h2>
+                      <p style={{ color: 'var(--text-muted)' }}>Canción #{playedSongs.length} de {playlist?.tracks.length}</p>
+                    </>
+                  ) : (
+                    <>
+                      <h2 style={{ marginBottom: '5px', fontSize: isMobile ? '1.1rem' : '1.8rem' }}>{currentSong.name}</h2>
+                      <p style={{ color: 'var(--text-muted)', fontSize: isMobile ? '0.9rem' : '1.3rem', marginBottom: '0.5rem' }}>{currentSong.artist}</p>
+                    </>
+                  )}
+                </div>
                 
-                {/* 
-                  Mantenemos el reproductor de 30s como fallback SIEMPRE en móvil o si no hay SDK activo.
-                */}
+                {/* Fallback Audio and status icons */}
                 {currentSong.previewUrl && (
                   <div style={{ width: '100%', maxWidth: '340px', marginTop: '12px' }}>
                     <audio key={currentSong.id} controls src={currentSong.previewUrl} autoPlay style={{ width: '100%' }} />
-                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '5px' }}>
-                      {spotifyToken !== 'skipped' ? '💡 Sonando preview de 30s. Si tienes Spotify abierto, debería cambiar allí.' : '🔊 Sonando preview de 30s.'}
-                    </p>
-                  </div>
-                )}
-
-                {(!currentSong.previewUrl && (!deviceId || spotifyToken === 'skipped')) && (
-                  <div style={{ color: '#ff8a00', marginTop: '10px', textAlign: 'center', fontSize: '0.85rem' }}>
-                    ⚠️ No hay preview disponible.
                   </div>
                 )}
                 
                 {spotifyToken && spotifyToken !== 'skipped' && (
-                  <div style={{ marginTop: '15px', padding: '10px', background: 'rgba(29, 185, 84, 0.1)', borderRadius: '10px', width: '100%' }}>
-                    <div style={{ color: '#1DB954', fontSize: '0.85rem', fontWeight: 'bold' }}>
-                      {deviceId ? '🟢 Reproduciendo en este navegador' : '📱 Intentando control remoto...'}
-                    </div>
-                    {!deviceId && (
-                      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '5px' }}>
-                        Si no cambia la canción, abre la App de Spotify en tu móvil y dale al Play.
-                      </p>
-                    )}
+                  <div style={{ marginTop: '10px', fontSize: '0.8rem', color: '#1DB954' }}>
+                    {deviceId ? '🟢 Conectado a Spotify Web' : '📱 Controlando Spotify (Remoto)'}
                   </div>
                 )}
               </>
             ) : (
               <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '1rem' }}>
-                <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>🎵</div>
-                <h2 style={{ fontSize: isMobile ? '1.1rem' : '1.5rem' }}>Listo para empezar</h2>
-                <p style={{ fontSize: '0.9rem' }}>Pulsa "Siguiente Canción" para sacar una canción</p>
+                <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>🎲</div>
+                <h2 style={{ fontSize: isMobile ? '1.1rem' : '1.8rem' }}>¿Todo listo?</h2>
+                <p>Pulsa abajo para sacar la primera canción</p>
               </div>
             )}
           </div>
 
           <div style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
-             <button onClick={playNextSong} style={{ flex: 1, padding: isMobile ? '15px' : '20px', fontSize: isMobile ? '1.1rem' : '1.5rem' }}>
-              {currentSong ? '⏭ Siguiente Canción' : '▶ Empezar'}
+             <button onClick={playNextSong} style={{ flex: 1, padding: isMobile ? '15px' : '25px', fontSize: isMobile ? '1.1rem' : '1.7rem' }}>
+              {currentSong ? '⏭ Siguiente Canción' : '▶ Empezar Juego'}
              </button>
              {deviceId && spotifyToken !== 'skipped' && playerRef.current && (
                 <button className="secondary" onClick={() => playerRef.current.togglePlay()} style={{ padding: isMobile ? '15px' : '20px', fontSize: '1.5rem' }}>⏯</button>
@@ -417,15 +423,24 @@ export default function PresenterDashboard() {
           </div>
         </div>
 
-        <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', minHeight: isMobile ? 'auto' : 0, overflow: 'hidden', maxHeight: isMobile ? '300px' : undefined }}>
-          <h3 style={{ flexShrink: 0, fontSize: isMobile ? '1rem' : undefined }}>🏠 PIN: <strong style={{ letterSpacing: '3px', color: 'white' }}>{roomId}</strong></h3>
+        <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', minHeight: isMobile ? 'auto' : 0, overflow: 'hidden', maxHeight: isMobile ? '400px' : undefined }}>
+          <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '15px', textAlign: 'center', marginBottom: '1rem' }}>
+            <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '2px' }}>PIN de la Sala</div>
+            <div style={{ fontSize: '3.5rem', fontWeight: '800', color: 'white', letterSpacing: '5px' }}>{roomId}</div>
+          </div>
           
-          <h3 style={{ flexShrink: 0, fontSize: isMobile ? '0.9rem' : undefined, marginTop: '0.5rem' }}>Historial ({playedSongs.length})</h3>
+          <h3 style={{ flexShrink: 0, fontSize: isMobile ? '0.9rem' : undefined }}>Historial ({playedSongs.length})</h3>
           <div style={{ flex: 1, overflowY: 'auto', background: 'var(--glass-bg)', borderRadius: '10px', padding: '8px', minHeight: 0 }}>
             {playedSongs.slice().reverse().map((song, i) => (
-              <div key={i} style={{ padding: '6px 8px', borderBottom: '1px solid var(--glass-border)', fontSize: '0.85rem' }}>
-                <strong>{song.name}</strong>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{song.artist}</div>
+              <div key={i} style={{ padding: '8px 10px', borderBottom: '1px solid var(--glass-border)', fontSize: '0.9rem', opacity: hideSongInfo && i === 0 ? 0.3 : 1 }}>
+                {hideSongInfo && i === 0 ? (
+                  <strong>Canción actual (Oculta)</strong>
+                ) : (
+                  <>
+                    <strong>{song.name}</strong>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{song.artist}</div>
+                  </>
+                )}
               </div>
             ))}
           </div>
