@@ -29,10 +29,13 @@ function generateBingoCard(playlist, size = 16) {
 function checkWin(card, playedSongs, markedIndexes, type) {
   const gridSize = 4; 
   
-  // 1. Check if any marked songs haven't actually been played
+  // 1. Check for invalid marks (songs not yet played)
+  const playedSet = new Set(playedSongs.map(id => String(id)));
+  
   const invalidIndexes = markedIndexes.filter(idx => {
-    const songId = card[idx].songId;
-    return !playedSongs.includes(songId);
+    if (!card[idx]) return false;
+    const songId = String(card[idx].songId);
+    return !playedSet.has(songId);
   });
 
   if (invalidIndexes.length > 0) {
@@ -45,42 +48,41 @@ function checkWin(card, playedSongs, markedIndexes, type) {
 
   const isMarked = (idx) => markedIndexes.includes(idx);
 
-  // 2. Full Card (BINGO)
+  // 2. BINGO (All 16)
   if (type === 'BINGO') {
-    if (markedIndexes.length === 16) {
+    if (markedIndexes.length >= 16) {
       return { success: true };
     }
     return { success: false, reason: 'INCOMPLETE_BINGO' };
   }
 
-  // 3. Line (LINE)
+  // 3. LINE (One line of 4)
   if (type === 'LINE') {
-    // Check rows
+    // Rows
     for (let r = 0; r < gridSize; r++) {
-      let rowWin = true;
+      let rowMatch = true;
       for (let c = 0; c < gridSize; c++) {
-        if (!isMarked(r * gridSize + c)) rowWin = false;
+        if (!isMarked(r * gridSize + c)) rowMatch = false;
       }
-      if (rowWin) return { success: true };
+      if (rowMatch) return { success: true };
     }
 
-    // Check cols
+    // Columns
     for (let c = 0; c < gridSize; c++) {
-      let colWin = true;
+      let colMatch = true;
       for (let r = 0; r < gridSize; r++) {
-        if (!isMarked(r * gridSize + c)) colWin = false;
+        if (!isMarked(r * gridSize + c)) colMatch = false;
       }
-      if (colWin) return { success: true };
+      if (colMatch) return { success: true };
     }
 
-    // Check diagonals
-    let diag1Win = true;
-    let diag2Win = true;
+    // Diagonals
+    let d1 = true, d2 = true;
     for (let i = 0; i < gridSize; i++) {
-        if (!isMarked(i * gridSize + i)) diag1Win = false;
-        if (!isMarked(i * gridSize + (gridSize - 1 - i))) diag2Win = false;
+      if (!isMarked(i * gridSize + i)) d1 = false;
+      if (!isMarked(i * gridSize + (gridSize - 1 - i))) d2 = false;
     }
-    if (diag1Win || diag2Win) return { success: true };
+    if (d1 || d2) return { success: true };
 
     return { success: false, reason: 'INCOMPLETE_LINE' };
   }

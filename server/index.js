@@ -104,22 +104,31 @@ io.on('connection', (socket) => {
   });
 
   socket.on('claimWin', ({ roomId, markedIndexes, type }) => {
-    const room = gameManager.getRoom(roomId);
-    if (!room) return;
+    const rId = roomId ? roomId.toUpperCase() : '';
+    const room = gameManager.getRoom(rId);
+    
+    if (!room) {
+      console.log(`[ClaimWin] Room not found: ${rId}`);
+      return;
+    }
 
     const player = room.players.find(p => p.socketId === socket.id);
     if (!player) return;
 
-    const marks = markedIndexes || [];
-    const result = checkWin(player.card, room.playedSongs, marks, type);
+    console.log(`[ClaimWin] ${player.name} claiming ${type} in ${rId}. Marks:`, markedIndexes); // Add logging
+
+    const marks = Array.isArray(markedIndexes) ? markedIndexes.map(Number) : [];
+    const result = checkWin(player.card, room.playedSongs, marks, type); // Use the updated checkWin
+
+    console.log(`[ClaimWin] Validation Result for ${player.name}:`, result); // Log checkWin results
 
     if (result.success) {
       if (type === 'BINGO') {
         room.status = 'FINISHED';
-        io.to(roomId).emit('bingoWinner', { player });
+        io.to(rId).emit('bingoWinner', { player });
       } else {
-        // Line winner - notify everyone but don't end game
-        io.to(roomId).emit('lineWinner', { player });
+        // Line winner - notify everyone
+        io.to(rId).emit('lineWinner', { player });
       }
     } else {
       socket.emit('winInvalid', { 
