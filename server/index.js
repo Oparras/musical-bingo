@@ -36,7 +36,16 @@ app.get('/api/spotify/playlist/:id', async (req, res) => {
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: '*',
+    origin: (origin, callback) => {
+      // Allow local dev, all vercel.app subdomains, and direct access
+      const allowed = !origin || 
+        origin.includes('localhost') || 
+        origin.includes('127.0.0.1') || 
+        origin.includes('vercel.app') ||
+        origin.includes('netlify.app') ||
+        (process.env.FRONTEND_URL && origin === process.env.FRONTEND_URL);
+      callback(null, allowed);
+    },
     methods: ['GET', 'POST']
   }
 });
