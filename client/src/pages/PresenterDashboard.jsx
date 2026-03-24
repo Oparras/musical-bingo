@@ -38,7 +38,6 @@ export default function PresenterDashboard() {
   const [deviceId, setDeviceId] = useState(null);
   const [playerLoading, setPlayerLoading] = useState(false);
   const playerRef = useRef(null);
-  const audioRef = useRef(null); // Ref for the free-tier HTML5 audio fallback
 
   const [roomId, setRoomId] = useState('');
   const [playlistUrl, setPlaylistUrl] = useState('');
@@ -128,7 +127,7 @@ export default function PresenterDashboard() {
 
   // Initialize Spotify Web Playback SDK if we have a token
   useEffect(() => {
-    if (!spotifyToken || spotifyToken === 'skipped') return;
+    if (!spotifyToken) return;
 
     setPlayerLoading(true);
     // Remove existing script if any to prevent duplicates during hot reloads
@@ -272,7 +271,7 @@ export default function PresenterDashboard() {
         ? `https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`
         : `https://api.spotify.com/v1/me/player/play`;
 
-      if (spotifyToken && spotifyToken !== 'skipped') {
+      if (spotifyToken) {
         const res = await fetch(playEndpoint, {
           method: 'PUT',
           body: JSON.stringify({ uris: [randomTrack.uri] }),
@@ -286,16 +285,6 @@ export default function PresenterDashboard() {
       }
     } catch (e) {
       console.error('Playback command failed:', e);
-    }
-  };
-
-  const toggleLocalAudio = () => {
-    if (audioRef.current) {
-      if (audioRef.current.paused) {
-        audioRef.current.play().catch(e => console.error("Auto-play prevented:", e));
-      } else {
-        audioRef.current.pause();
-      }
     }
   };
 
@@ -338,15 +327,11 @@ export default function PresenterDashboard() {
         <h2>Host a Game</h2>
         {error && <div style={{ color: '#ff4d4d', marginBottom: '1rem' }}>{error}</div>}
         <p style={{ margin: '2rem 0', color: 'var(--text-muted)' }}>
-          Para que la aplicación reproduzca las canciones automáticamente, necesitas iniciar sesión con una cuenta de Spotify Premium. 
-          Si no tienes, elige "Modo Manual": tú mismo pondrás la música desde tu propia App de Spotify, y usarás esta pantalla solo para pasar de canción y controlar el juego.
+          Para que la aplicación funcione y reproduzca la música automáticamente, es obligatorio iniciar sesión con una cuenta de Spotify Premium.
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
           <button onClick={handleSpotifyLogin} style={{ background: '#1DB954' }}>
             Iniciar sesión con Spotify Premium
-          </button>
-          <button className="secondary" onClick={() => setSpotifyToken('skipped')}>
-            Continuar en Modo Manual (Sin música automática)
           </button>
           <button className="secondary" onClick={() => navigate('/')} style={{ marginTop: '10px', opacity: 0.7 }}>
             🔙 Volver al Inicio
@@ -478,28 +463,7 @@ export default function PresenterDashboard() {
                   )}
                 </div>
                 
-                
-                {/* Fallback Audio and status icons */}
-                {currentSong.previewUrl ? (
-                  <div style={{ width: '100%', maxWidth: '340px', marginTop: '12px' }}>
-                    <audio 
-                      ref={audioRef} 
-                      key={currentSong.id} 
-                      controls 
-                      src={currentSong.previewUrl} 
-                      autoPlay 
-                      style={{ width: '100%', display: 'none' }} // Hide native controls to use the big ⏯ button
-                    />
-                  </div>
-                ) : (
-                  spotifyToken === 'skipped' && (
-                    <div style={{ marginTop: '15px', padding: '10px', background: 'rgba(255,0,0,0.15)', borderRadius: '10px', color: '#ffaaaa', fontSize: '0.85rem', maxWidth: '300px', textAlign: 'center' }}>
-                      ⚠️ Spotify no permite preview gratuita para esta canción en concreto.
-                    </div>
-                  )
-                )}
-                
-                {spotifyToken && spotifyToken !== 'skipped' && (
+                {spotifyToken && (
                   <div style={{ marginTop: '10px', fontSize: '0.8rem', color: '#1DB954' }}>
                     {deviceId ? '🟢 Conectado a Spotify Web' : '📱 Controlando Spotify (Remoto)'}
                   </div>
@@ -519,12 +483,10 @@ export default function PresenterDashboard() {
               {currentSong ? '⏭ Siguiente Canción' : '▶ Empezar Juego'}
              </button>
              
-             {/* Big play/pause button for BOTH Premium and Free formats */}
-             {(deviceId && spotifyToken !== 'skipped' && playerRef.current) ? (
+             {/* Big play/pause button for Premium formats */}
+             {(deviceId && playerRef.current) && (
                 <button className="secondary" onClick={() => playerRef.current.togglePlay()} style={{ padding: isMobile ? '15px' : '20px', fontSize: '1.5rem' }}>⏯</button>
-             ) : (spotifyToken === 'skipped' && currentSong?.previewUrl) ? (
-                <button className="secondary" onClick={toggleLocalAudio} style={{ padding: isMobile ? '15px' : '20px', fontSize: '1.5rem' }}>⏯</button>
-             ) : null}
+             )}
           </div>
         </div>
 
