@@ -38,6 +38,7 @@ export default function PresenterDashboard() {
   const [deviceId, setDeviceId] = useState(null);
   const [playerLoading, setPlayerLoading] = useState(false);
   const playerRef = useRef(null);
+  const audioRef = useRef(null); // Ref for the free-tier HTML5 audio fallback
 
   const [roomId, setRoomId] = useState('');
   const [playlistUrl, setPlaylistUrl] = useState('');
@@ -288,6 +289,16 @@ export default function PresenterDashboard() {
     }
   };
 
+  const toggleLocalAudio = () => {
+    if (audioRef.current) {
+      if (audioRef.current.paused) {
+        audioRef.current.play().catch(e => console.error("Auto-play prevented:", e));
+      } else {
+        audioRef.current.pause();
+      }
+    }
+  };
+
   // --- PRIVATE ACCESS GATE ---
   if (!presenterAuth && !window.localStorage.getItem('presenter_verified')) {
     const handleAuth = (e) => {
@@ -467,11 +478,25 @@ export default function PresenterDashboard() {
                   )}
                 </div>
                 
+                
                 {/* Fallback Audio and status icons */}
-                {currentSong.previewUrl && (
+                {currentSong.previewUrl ? (
                   <div style={{ width: '100%', maxWidth: '340px', marginTop: '12px' }}>
-                    <audio key={currentSong.id} controls src={currentSong.previewUrl} autoPlay style={{ width: '100%' }} />
+                    <audio 
+                      ref={audioRef} 
+                      key={currentSong.id} 
+                      controls 
+                      src={currentSong.previewUrl} 
+                      autoPlay 
+                      style={{ width: '100%', display: 'none' }} // Hide native controls to use the big ⏯ button
+                    />
                   </div>
+                ) : (
+                  spotifyToken === 'skipped' && (
+                    <div style={{ marginTop: '15px', padding: '10px', background: 'rgba(255,0,0,0.15)', borderRadius: '10px', color: '#ffaaaa', fontSize: '0.85rem', maxWidth: '300px', textAlign: 'center' }}>
+                      ⚠️ Spotify no permite preview gratuita para esta canción en concreto.
+                    </div>
+                  )
                 )}
                 
                 {spotifyToken && spotifyToken !== 'skipped' && (
@@ -493,9 +518,13 @@ export default function PresenterDashboard() {
              <button onClick={playNextSong} style={{ flex: 1, padding: isMobile ? '15px' : '25px', fontSize: isMobile ? '1.1rem' : '1.7rem' }}>
               {currentSong ? '⏭ Siguiente Canción' : '▶ Empezar Juego'}
              </button>
-             {deviceId && spotifyToken !== 'skipped' && playerRef.current && (
+             
+             {/* Big play/pause button for BOTH Premium and Free formats */}
+             {(deviceId && spotifyToken !== 'skipped' && playerRef.current) ? (
                 <button className="secondary" onClick={() => playerRef.current.togglePlay()} style={{ padding: isMobile ? '15px' : '20px', fontSize: '1.5rem' }}>⏯</button>
-             )}
+             ) : (spotifyToken === 'skipped' && currentSong?.previewUrl) ? (
+                <button className="secondary" onClick={toggleLocalAudio} style={{ padding: isMobile ? '15px' : '20px', fontSize: '1.5rem' }}>⏯</button>
+             ) : null}
           </div>
         </div>
 
