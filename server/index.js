@@ -10,6 +10,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Health check endpoint (used by UptimeRobot / self-ping to prevent Render sleep)
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), rooms: 'in-memory' });
+});
+
 const spotifyApi = require('./spotifyApi');
 
 // -> REST API Routes <-
@@ -212,4 +217,23 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
+
+  // --- Keep-alive self-ping (prevents Render free tier from sleeping) ---
+  const selfUrl = process.env.RENDER_EXTERNAL_URL || process.env.BACKEND_URL;
+  if (selfUrl) {
+    const PING_INTERVAL_MS = 4 * 60 * 1000; // every 4 minutes
+    setInterval(async () => {
+      try {
+        const url = `${selfUrl}/health`;
+        const res = await fetch(url);
+        const data = await res.json();
+        console.log(`[Keep-alive] Ping OK at ${data.timestamp}`);
+      } catch (err) {
+        console.warn('[Keep-alive] Ping failed:', err.message);
+      }
+    }, PING_INTERVAL_MS);
+    console.log(`[Keep-alive] Self-ping active every 4 minutes → ${selfUrl}/health`);
+  } else {
+    console.log('[Keep-alive] No RENDER_EXTERNAL_URL or BACKEND_URL set - self-ping disabled (local dev)');
+  }
 });
