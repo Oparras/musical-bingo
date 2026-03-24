@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -50,9 +50,10 @@ export default function PresenterDashboard() {
   const [currentSong, setCurrentSong] = useState(null);
   const [winner, setWinner] = useState(null);
   const [hideSongInfo, setHideSongInfo] = useState(false);
-  const [presenterAuth, setPresenterAuth] = useState(false); // Exclusive access
+  const [presenterAuth, setPresenterAuth] = useState(false);
   const [authInput, setAuthInput] = useState('');
- // Mode to hide info when projecting
+  const [playersProgress, setPlayersProgress] = useState([]);
+  const [lineWinnerName, setLineWinnerName] = useState(null);
 
   // --- SPOTIFY PKCE AUTH FLOW ---
   useEffect(() => {
@@ -183,12 +184,27 @@ export default function PresenterDashboard() {
     socket.on('roomCreated', ({ roomId }) => { setRoomId(roomId); setGameState('WAITING'); });
     socket.on('playerJoined', ({ players }) => setPlayers(players));
     socket.on('playerLeft', ({ players }) => setPlayers(players));
-    socket.on('gameStartedPresenter', ({ players }) => { setPlayers(players); setGameState('PLAYING'); });
+    socket.on('gameStartedPresenter', ({ players }) => {
+      setPlayers(players);
+      setGameState('PLAYING');
+      // Init progress table with all players at 0
+      setPlayersProgress(players.map(p => ({ id: p.id, name: p.name, markedCount: 0, cardSize: 16, hasLine: false, hasBingo: false })));
+    });
     socket.on('bingoWinner', ({ player }) => { setWinner(player); setGameState('FINISHED'); });
     socket.on('error', (err) => { setError(err); setLoading(false); });
+    socket.on('playersProgress', ({ players }) => {
+      setPlayersProgress(players);
+    });
+    socket.on('lineWinner', ({ player }) => {
+      setLineWinnerName(player.name);
+      setPlayersProgress(prev => prev.map(p =>
+        p.name === player.name ? { ...p, hasLine: true } : p
+      ));
+    });
     return () => {
       socket.off('roomCreated'); socket.off('playerJoined'); socket.off('playerLeft');
       socket.off('gameStartedPresenter'); socket.off('bingoWinner'); socket.off('error');
+      socket.off('playersProgress'); socket.off('lineWinner');
     };
   }, [socket]);
 
@@ -483,31 +499,121 @@ export default function PresenterDashboard() {
           </div>
         </div>
 
-        <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', minHeight: isMobile ? 'auto' : 0, overflow: 'hidden', maxHeight: isMobile ? '400px' : undefined }}>
-          <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '15px', textAlign: 'center', marginBottom: '1rem' }}>
-            <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '2px' }}>PIN de la Sala</div>
-            <div style={{ fontSize: '3.5rem', fontWeight: '800', color: 'white', letterSpacing: '5px' }}>{roomId}</div>
+        {/* RIGHT PANEL: PIN + Analytics + History */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minHeight: 0, overflow: 'hidden' }}>
+
+          {/* PIN */}
+          <div className="glass-panel" style={{ padding: '12px', textAlign: 'center', flexShrink: 0 }}>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '2px' }}>PIN de la Sala</div>
+            <div style={{ fontSize: '2.8rem', fontWeight: '800', color: 'white', letterSpacing: '5px' }}>{roomId}</div>
           </div>
-          
-          <h3 style={{ flexShrink: 0, fontSize: isMobile ? '0.9rem' : undefined }}>
-            {hideSongInfo ? 'Historial (Oculto)' : `Historial (${playedSongs.length})`}
-          </h3>
-          <div style={{ flex: 1, overflowY: 'auto', background: 'var(--glass-bg)', borderRadius: '10px', padding: '8px', minHeight: 0 }}>
-            {playedSongs.slice().reverse().map((song, i) => (
-              <div key={i} style={{ padding: '8px 10px', borderBottom: '1px solid var(--glass-border)', fontSize: '0.9rem', opacity: hideSongInfo ? 0.3 : 1 }}>
-                {hideSongInfo ? (
-                  <div style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                    Canción #{playedSongs.length - i} (Oculta)
-                  </div>
-                ) : (
-                  <>
-                    <strong>{song.name}</strong>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{song.artist}</div>
-                  </>
-                )}
-              </div>
-            ))}
+
+          {/* LINE WINNER BANNER */}
+          {lineWinnerName && (
+            <div style={{
+              background: 'linear-gradient(135deg, #ff8a00, #e52e71)',
+              borderRadius: '12px',
+              padding: '10px 16px',
+              textAlign: 'center',
+              fontWeight: '700',
+              fontSize: '0.9rem',
+              flexShrink: 0,
+              animation: 'lineWinnerPop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
+            }}>
+              📢 LÍNEA: {lineWinnerName}
+            </div>
+          )}
+
+          {/* ANALYTICS PANEL */}
+          <div className="glass-panel" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', padding: '12px' }}>
+            <h3 style={{ flexShrink: 0, margin: '0 0 10px 0', fontSize: '0.95rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>
+              📊 Progreso ({playersProgress.length} jugadores)
+            </h3>
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', minHeight: 0 }}>
+              {playersProgress.length === 0 && (
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', marginTop: '1rem' }}>Sin datos aún...</p>
+              )}
+              {[...playersProgress]
+                .sort((a, b) => b.markedCount - a.markedCount)
+                .map(p => {
+                  const pct = Math.round((p.markedCount / (p.cardSize || 16)) * 100);
+                  const remaining = (p.cardSize || 16) - p.markedCount;
+                  let alertColor = '#4ade80'; // green
+                  let alertLabel = '';
+                  if (remaining <= 1) { alertColor = '#f97316'; alertLabel = '🔥 ¡1 canción!'; }
+                  else if (remaining <= 2) { alertColor = '#fb923c'; alertLabel = '🔥 ¡Muy cerca!'; }
+                  else if (remaining <= 4) { alertColor = '#facc15'; alertLabel = '⚡ ¡A tiro!'; }
+                  else if (pct >= 50) { alertColor = '#60a5fa'; alertLabel = ''; }
+                  else { alertColor = 'rgba(255,255,255,0.2)'; alertLabel = ''; }
+
+                  return (
+                    <div key={p.id} style={{
+                      background: 'rgba(255,255,255,0.05)',
+                      borderRadius: '10px',
+                      padding: '8px 10px',
+                      border: `1px solid ${remaining <= 4 ? alertColor + '88' : 'var(--glass-border)'}`,
+                      transition: 'border-color 0.3s ease',
+                    }}>
+                      {/* Name row */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
+                        <div style={{ fontWeight: '700', fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                          {p.name}
+                        </div>
+                        <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexShrink: 0, marginLeft: '6px' }}>
+                          {p.hasLine && (
+                            <span style={{ background: 'linear-gradient(135deg,#ff8a00,#e52e71)', borderRadius: '6px', padding: '1px 6px', fontSize: '0.7rem', fontWeight: '700' }}>LÍNEA</span>
+                          )}
+                          {p.hasBingo && (
+                            <span style={{ background: 'linear-gradient(135deg,#ff007f,#ff8a00)', borderRadius: '6px', padding: '1px 6px', fontSize: '0.7rem', fontWeight: '700' }}>BINGO</span>
+                          )}
+                          {alertLabel && (
+                            <span style={{ color: alertColor, fontSize: '0.72rem', fontWeight: '700' }}>{alertLabel}</span>
+                          )}
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{p.markedCount}/{p.cardSize || 16}</span>
+                        </div>
+                      </div>
+                      {/* Progress bar */}
+                      <div style={{ height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '99px', overflow: 'hidden' }}>
+                        <div style={{
+                          height: '100%',
+                          width: `${pct}%`,
+                          background: remaining <= 2
+                            ? 'linear-gradient(90deg, #f97316, #facc15)'
+                            : remaining <= 4
+                            ? 'linear-gradient(90deg, #60a5fa, #a78bfa)'
+                            : 'linear-gradient(90deg, var(--primary-color), var(--secondary-color))',
+                          borderRadius: '99px',
+                          transition: 'width 0.4s ease',
+                        }} />
+                      </div>
+                    </div>
+                  );
+                })
+              }
+            </div>
           </div>
+
+          {/* SONG HISTORY */}
+          <div className="glass-panel" style={{ flexShrink: 0, maxHeight: isMobile ? '180px' : '200px', overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: '12px' }}>
+            <h3 style={{ flexShrink: 0, margin: '0 0 8px 0', fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>
+              {hideSongInfo ? 'Historial (Oculto)' : `Historial (${playedSongs.length})`}
+            </h3>
+            <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+              {playedSongs.slice().reverse().map((song, i) => (
+                <div key={i} style={{ padding: '5px 8px', borderBottom: '1px solid var(--glass-border)', fontSize: '0.8rem', opacity: hideSongInfo ? 0.3 : 1 }}>
+                  {hideSongInfo ? (
+                    <div style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Canción #{playedSongs.length - i} (Oculta)</div>
+                  ) : (
+                    <>
+                      <strong>{song.name}</strong>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{song.artist}</div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
         </div>
       </div>
     );

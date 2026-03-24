@@ -97,7 +97,9 @@ h1, h2, h3, h4, h5, h6 {
 .text-gradient {
   background: linear-gradient(90deg, var(--accent-color), #ff8a00);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
+  color: transparent;
 }
 
 input {
@@ -140,4 +142,32 @@ input::placeholder {
     font-size: 1rem;
     padding: 10px 22px;
   }
+}
+
+/* ===== SHARED ANIMATIONS ===== */
+@keyframes lineWinnerPop {
+  from { opacity: 0; transform: scale(0.8) translateY(-10px); }
+  to   { opacity: 1; transform: scale(1)   translateY(0); }
+}
+
+@keyframes toastSlideIn {
+  from { opacity: 0; transform: translateY(-20px) scale(0.9); }
+  to   { opacity: 1; transform: translateY(0)     scale(1); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  transform: none !important;
+  box-shadow: none !important;
 }

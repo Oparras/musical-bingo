@@ -103,6 +103,31 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('playerJoined', { player: result.player, players: result.room.players });
   });
 
+  // Player sends their current marked indexes so server can track progress
+  socket.on('updateProgress', ({ roomId, markedIndexes }) => {
+    const rId = roomId ? roomId.toUpperCase() : '';
+    const room = gameManager.getRoom(rId);
+    if (!room) return;
+
+    const player = room.players.find(p => p.socketId === socket.id);
+    if (!player) return;
+
+    // Update the player's marked songs count for analytics
+    player.markedCount = Array.isArray(markedIndexes) ? markedIndexes.length : 0;
+
+    // Broadcast updated progress to presenter
+    const presenterSocket = room.presenter;
+    const progressData = room.players.map(p => ({
+      id: p.id,
+      name: p.name,
+      markedCount: p.markedCount || 0,
+      cardSize: 16,
+      hasLine: p.hasLine || false,
+      hasBingo: p.hasBingo || false,
+    }));
+    io.to(presenterSocket).emit('playersProgress', { players: progressData });
+  });
+
   socket.on('claimWin', ({ roomId, markedIndexes, type }) => {
     const rId = roomId ? roomId.toUpperCase() : '';
     const room = gameManager.getRoom(rId);
@@ -115,20 +140,52 @@ io.on('connection', (socket) => {
     const player = room.players.find(p => p.socketId === socket.id);
     if (!player) return;
 
-    console.log(`[ClaimWin] ${player.name} claiming ${type} in ${rId}. Marks:`, markedIndexes); // Add logging
+    console.log(`[ClaimWin] ${player.name} claiming ${type} in ${rId}. Marks:`, markedIndexes);
+
+    // --- Anti-duplicate checks ---
+    if (type === 'LINE') {
+      // If this player already has a line, reject silently
+      if (player.hasLine) {
+        console.log(`[ClaimWin] ${player.name} already has LINE - ignoring duplicate`);
+        socket.emit('winInvalid', { reason: 'ALREADY_CLAIMED_LINE', type });
+        return;
+      }
+      // If room already has a line winner and we are in strict mode, reject
+      // (we allow multiple line winners but prevent same player spamming)
+      if (room.lineLocked) {
+        console.log(`[ClaimWin] Line already locked in room ${rId} - ignoring`);
+        socket.emit('winInvalid', { reason: 'LINE_ALREADY_CLAIMED', type });
+        return;
+      }
+    }
+
+    if (type === 'BINGO') {
+      if (player.hasBingo) {
+        console.log(`[ClaimWin] ${player.name} already has BINGO - ignoring duplicate`);
+        return;
+      }
+    }
 
     const marks = Array.isArray(markedIndexes) ? markedIndexes.map(Number) : [];
-    const result = checkWin(player.card, room.playedSongs, marks, type); // Use the updated checkWin
+    const result = checkWin(player.card, room.playedSongs, marks, type);
 
-    console.log(`[ClaimWin] Validation Result for ${player.name}:`, result); // Log checkWin results
+    console.log(`[ClaimWin] Validation Result for ${player.name}:`, result);
 
     if (result.success) {
       if (type === 'BINGO') {
+        player.hasBingo = true;
         room.status = 'FINISHED';
         io.to(rId).emit('bingoWinner', { player });
       } else {
-        // Line winner - notify everyone
+        // LINE: mark player as having a line, lock room line so nobody else can claim
+        player.hasLine = true;
+        room.lineLocked = true;
+
+        // Notify ALL players (so everyone gets the popup)
         io.to(rId).emit('lineWinner', { player });
+
+        // After 30 seconds, unlock line so next round can happen (optional reset)
+        // room.lineLocked stays true until game ends or presenter resets
       }
     } else {
       socket.emit('winInvalid', { 
