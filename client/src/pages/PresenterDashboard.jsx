@@ -338,15 +338,15 @@ export default function PresenterDashboard() {
         <h2>Host a Game</h2>
         {error && <div style={{ color: '#ff4d4d', marginBottom: '1rem' }}>{error}</div>}
         <p style={{ margin: '2rem 0', color: 'var(--text-muted)' }}>
-          Para reproducir las canciones enteras durante el juego, necesitas iniciar sesión con una cuenta de Spotify Premium. 
-          Si no tienes, puedes saltar este paso, pero solo se escucharán fragmentos de 30 segundos de las canciones.
+          Para que la aplicación reproduzca las canciones automáticamente, necesitas iniciar sesión con una cuenta de Spotify Premium. 
+          Si no tienes, elige "Modo Manual": tú mismo pondrás la música desde tu propia App de Spotify, y usarás esta pantalla solo para pasar de canción y controlar el juego.
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
           <button onClick={handleSpotifyLogin} style={{ background: '#1DB954' }}>
             Iniciar sesión con Spotify Premium
           </button>
           <button className="secondary" onClick={() => setSpotifyToken('skipped')}>
-            Continuar sin Premium (solo Previews 30s)
+            Continuar en Modo Manual (Sin música automática)
           </button>
           <button className="secondary" onClick={() => navigate('/')} style={{ marginTop: '10px', opacity: 0.7 }}>
             🔙 Volver al Inicio
