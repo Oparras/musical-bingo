@@ -147,6 +147,9 @@ io.on('connection', (socket) => {
 
     console.log(`[ClaimWin] ${player.name} claiming ${type} in ${rId}. Marks:`, markedIndexes);
 
+    const marks = Array.isArray(markedIndexes) ? markedIndexes.map(Number) : [];
+    const result = checkWin(player.card, room.playedSongs, marks, type);
+
     // --- Anti-duplicate checks ---
     if (type === 'LINE') {
       // If this player already has a line, reject silently
@@ -155,9 +158,10 @@ io.on('connection', (socket) => {
         socket.emit('winInvalid', { reason: 'ALREADY_CLAIMED_LINE', type });
         return;
       }
+      
       // If room already has a line winner and we are in strict mode, reject
-      // (we allow multiple line winners but prevent same player spamming)
-      if (room.lineLocked) {
+      // BUT if their marks are invalid, we STILL want them to be penalized!
+      if (room.lineLocked && result.reason !== 'INVALID_MARKS') {
         console.log(`[ClaimWin] Line already locked in room ${rId} - ignoring`);
         socket.emit('winInvalid', { reason: 'LINE_ALREADY_CLAIMED', type });
         return;
@@ -170,9 +174,6 @@ io.on('connection', (socket) => {
         return;
       }
     }
-
-    const marks = Array.isArray(markedIndexes) ? markedIndexes.map(Number) : [];
-    const result = checkWin(player.card, room.playedSongs, marks, type);
 
     console.log(`[ClaimWin] Validation Result for ${player.name}:`, result);
 

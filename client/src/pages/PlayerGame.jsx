@@ -122,6 +122,7 @@ export default function PlayerGame() {
   // Claim state — prevent duplicate submissions
   const [hasClaimedLine, setHasClaimedLine] = useState(false);
   const [hasClaimedBingo, setHasClaimedBingo] = useState(false);
+  const [roomLineClaimed, setRoomLineClaimed] = useState(false);
   const [lineSubmitting, setLineSubmitting] = useState(false);
   const [bingoSubmitting, setBingoSubmitting] = useState(false);
 
@@ -209,6 +210,7 @@ export default function PlayerGame() {
       setCard(card);
       setGameState('PLAYING');
       setHasClaimedLine(false);
+      setRoomLineClaimed(false);
       setHasClaimedBingo(false);
       setMarkedIndexes(new Set());
     });
@@ -220,6 +222,7 @@ export default function PlayerGame() {
 
     socket.on('lineWinner', ({ player }) => {
       const isMine = socket.id === player.socketId;
+      setRoomLineClaimed(true);
       if (isMine) {
         setHasClaimedLine(true);
         setLineSubmitting(false);
@@ -244,7 +247,12 @@ export default function PlayerGame() {
         return;
       }
       if (reason === 'INVALID_MARKS') {
-        addToast('🚫 ¡Tienes canciones marcadas que aún no han sonado! Se desmarcarán.', 'error', 5000);
+        if (type === 'LINE' && roomLineClaimed) {
+          addToast('📢 ¡La línea ya fue cantada! Y además, tienes canciones marcadas que aún no han sonado. Se desmarcarán.', 'error', 6000);
+        } else {
+          addToast('🚫 ¡Tienes canciones marcadas que aún no han sonado! Se desmarcarán.', 'error', 5000);
+        }
+        
         if (invalidIndexes && invalidIndexes.length > 0) {
           setMarkedIndexes(prev => {
             const next = new Set(prev);
