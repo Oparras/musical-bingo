@@ -4,20 +4,21 @@ import { useParams, useNavigate } from 'react-router-dom';
 
 // ---- Toast / Popup component ----
 function Toast({ toasts }) {
+  if (toasts.length === 0) return null;
   return (
     <div style={{
       position: 'fixed',
-      top: '20px',
+      top: '5%',
       left: '50%',
       transform: 'translateX(-50%)',
-      zIndex: 9999,
+      zIndex: 2147483647, // Max z-index to guarantee visibility
       display: 'flex',
       flexDirection: 'column',
       gap: '10px',
       alignItems: 'center',
       pointerEvents: 'none',
-      width: '90vw',
-      maxWidth: '500px',
+      width: '95vw',
+      maxWidth: '600px',
     }}>
       {toasts.map(t => (
         <div key={t.id} style={{
@@ -26,19 +27,20 @@ function Toast({ toasts }) {
             : t.type === 'winner'
             ? 'linear-gradient(135deg, #ff8a00, #e52e71)'
             : t.type === 'error'
-            ? 'linear-gradient(135deg, #ff4444, #cc0000)'
-            : 'linear-gradient(135deg, #2196F3, #0d47a1)',
+            ? 'linear-gradient(135deg, #ef4444, #b91c1c)'
+            : 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
           color: 'white',
-          padding: '16px 24px',
+          padding: '20px 24px',
           borderRadius: '16px',
-          fontWeight: '700',
-          fontSize: 'clamp(0.9rem, 4vw, 1.2rem)',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-          animation: 'toastIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
+          fontWeight: '800',
+          fontSize: 'clamp(1rem, 4.5vw, 1.3rem)',
+          boxShadow: '0 10px 40px rgba(0,0,0,0.6)',
+          animation: 'toastIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
           textAlign: 'center',
-          lineHeight: 1.3,
+          lineHeight: 1.4,
           pointerEvents: 'none',
           backdropFilter: 'blur(10px)',
+          border: '1px solid rgba(255,255,255,0.2)',
         }}>
           {t.message}
         </div>
@@ -285,16 +287,57 @@ export default function PlayerGame() {
     });
   };
 
+  const checkLocalGeometry = () => {
+    let hasLine = false;
+    let hasBingo = markedIndexes.size === 16;
+    
+    if (markedIndexes.size >= 4) {
+      const gridSize = 4;
+      const isMarked = (idx) => markedIndexes.has(idx);
+
+      // Rows
+      for (let r = 0; r < gridSize; r++) {
+        let rowMatch = true;
+        for (let c = 0; c < gridSize; c++) {
+          if (!isMarked(r * gridSize + c)) rowMatch = false;
+        }
+        if (rowMatch) hasLine = true;
+      }
+
+      // Columns
+      for (let c = 0; c < gridSize; c++) {
+        let colMatch = true;
+        for (let r = 0; r < gridSize; r++) {
+          if (!isMarked(r * gridSize + c)) colMatch = false;
+        }
+        if (colMatch) hasLine = true;
+      }
+
+      // Diagonals
+      let d1 = true, d2 = true;
+      for (let i = 0; i < gridSize; i++) {
+        if (!isMarked(i * gridSize + i)) d1 = false;
+        if (!isMarked(i * gridSize + (gridSize - 1 - i))) d2 = false;
+      }
+      if (d1 || d2) hasLine = true;
+    }
+
+    return { localLine: hasLine, localBingo: hasBingo };
+  };
+
+  const { localLine, localBingo } = checkLocalGeometry();
+
   const claimLine = () => {
     if (hasClaimedLine) {
       addToast('✅ Ya cantaste línea en esta partida', 'info', 3000);
       return;
     }
-    if (lineSubmitting) return;
-    if (markedIndexes.size < 4) {
-      addToast('⚠️ ¡Necesitas marcar al menos 4 canciones!', 'error', 3000);
+    if (!localLine) {
+      addToast('❌ Aún no tienes una Línea (4 en raya). Revisa tu cartón.', 'error', 3000);
       return;
     }
+    if (lineSubmitting) return;
+    
     setLineSubmitting(true);
     socket.emit('claimWin', {
       roomId: roomId.toUpperCase(),
@@ -307,11 +350,12 @@ export default function PlayerGame() {
 
   const claimBingo = () => {
     if (hasClaimedBingo) return;
-    if (bingoSubmitting) return;
-    if (markedIndexes.size < 16) {
-      addToast('⚠️ ¡Necesitas tener el cartón completo (16 canciones) para cantar Bingo!', 'error', 3000);
+    if (!localBingo) {
+      addToast('❌ ¡Necesitas marcar las 16 canciones para el Bingo lleno!', 'error', 3000);
       return;
     }
+    if (bingoSubmitting) return;
+    
     setBingoSubmitting(true);
     socket.emit('claimWin', {
       roomId: roomId.toUpperCase(),
@@ -345,8 +389,8 @@ export default function PlayerGame() {
 
   // ---- PLAYING STATE ----
   if (gameState === 'PLAYING') {
-    const canClaimLine = !hasClaimedLine && markedIndexes.size >= 4;
-    const canClaimBingo = !hasClaimedBingo && markedIndexes.size >= 16;
+    const canClaimLine = !hasClaimedLine && localLine;
+    const canClaimBingo = !hasClaimedBingo && localBingo;
 
     return (
       <>
@@ -460,7 +504,7 @@ export default function PlayerGame() {
           <div style={{ display: 'flex', gap: '10px' }}>
             <button
               onClick={claimLine}
-              disabled={hasClaimedLine || lineSubmitting}
+              disabled={hasClaimedLine || lineSubmitting || !localLine}
               className={canClaimLine && !hasClaimedLine ? 'claim-btn-pulse' : ''}
               style={{
                 flex: 1,
@@ -470,12 +514,14 @@ export default function PlayerGame() {
                   ? 'linear-gradient(90deg, #555, #444)'
                   : lineSubmitting
                   ? 'linear-gradient(90deg, #888, #666)'
-                  : 'linear-gradient(90deg, #ff8a00, #e52e71)',
+                  : localLine
+                  ? 'linear-gradient(90deg, #ff8a00, #e52e71)'
+                  : 'linear-gradient(90deg, #333, #444)',
                 borderRadius: '15px',
-                boxShadow: hasClaimedLine ? 'none' : '0 5px 15px rgba(229, 46, 113, 0.3)',
+                boxShadow: (hasClaimedLine || !localLine) ? 'none' : '0 5px 15px rgba(229, 46, 113, 0.3)',
                 WebkitTapHighlightColor: 'transparent',
-                opacity: hasClaimedLine ? 0.6 : 1,
-                cursor: hasClaimedLine ? 'not-allowed' : 'pointer',
+                opacity: (hasClaimedLine || !localLine) ? 0.6 : 1,
+                cursor: (hasClaimedLine || !localLine) ? 'not-allowed' : 'pointer',
                 transition: 'all 0.2s ease',
               }}
             >
@@ -483,7 +529,8 @@ export default function PlayerGame() {
             </button>
             <button
               onClick={claimBingo}
-              disabled={hasClaimedBingo || bingoSubmitting}
+              disabled={hasClaimedBingo || bingoSubmitting || !localBingo}
+              className={canClaimBingo && !hasClaimedBingo ? 'claim-btn-pulse' : ''}
               style={{
                 flex: 1.5,
                 padding: '15px',
@@ -492,12 +539,14 @@ export default function PlayerGame() {
                   ? 'linear-gradient(90deg, #555, #444)'
                   : bingoSubmitting
                   ? 'linear-gradient(90deg, #888, #666)'
-                  : 'linear-gradient(90deg, #ff007f, #ff8a00)',
+                  : localBingo
+                  ? 'linear-gradient(90deg, #ff007f, #ff8a00)'
+                  : 'linear-gradient(90deg, #333, #444)',
                 borderRadius: '15px',
-                boxShadow: hasClaimedBingo ? 'none' : '0 5px 15px rgba(255, 0, 127, 0.3)',
+                boxShadow: (hasClaimedBingo || !localBingo) ? 'none' : '0 5px 15px rgba(255, 0, 127, 0.3)',
                 WebkitTapHighlightColor: 'transparent',
-                opacity: hasClaimedBingo ? 0.6 : 1,
-                cursor: hasClaimedBingo ? 'not-allowed' : 'pointer',
+                opacity: (hasClaimedBingo || !localBingo) ? 0.6 : 1,
+                cursor: (hasClaimedBingo || !localBingo) ? 'not-allowed' : 'pointer',
                 transition: 'all 0.2s ease',
               }}
             >
