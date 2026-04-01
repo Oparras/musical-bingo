@@ -524,63 +524,79 @@ export default function PresenterDashboard() {
               {playersProgress.length === 0 && (
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', marginTop: '1rem' }}>Sin datos aún...</p>
               )}
-              {[...playersProgress]
-                .sort((a, b) => b.markedCount - a.markedCount)
-                .map(p => {
-                  const pct = Math.round((p.markedCount / (p.cardSize || 16)) * 100);
-                  const remaining = (p.cardSize || 16) - p.markedCount;
-                  let alertColor = '#4ade80'; // green
-                  let alertLabel = '';
-                  if (remaining <= 1) { alertColor = '#f97316'; alertLabel = '🔥 ¡1 canción!'; }
-                  else if (remaining <= 2) { alertColor = '#fb923c'; alertLabel = '🔥 ¡Muy cerca!'; }
-                  else if (remaining <= 4) { alertColor = '#facc15'; alertLabel = '⚡ ¡A tiro!'; }
-                  else if (pct >= 50) { alertColor = '#60a5fa'; alertLabel = ''; }
-                  else { alertColor = 'rgba(255,255,255,0.2)'; alertLabel = ''; }
+                  {[...playersProgress]
+                    .sort((a, b) => b.markedCount - a.markedCount)
+                    .map(p => {
+                      const pct = Math.round((p.markedCount / (p.cardSize || 16)) * 100);
+                      const remaining = (p.cardSize || 16) - p.markedCount;
+                      const isOffline = p.isConnected === false;
+                      
+                      let alertColor = '#4ade80'; // green
+                      let alertLabel = '';
+                      if (remaining <= 1) { alertColor = '#f97316'; alertLabel = '🔥 ¡1 canción!'; }
+                      else if (remaining <= 2) { alertColor = '#fb923c'; alertLabel = '🔥 ¡Muy cerca!'; }
+                      else if (remaining <= 4) { alertColor = '#facc15'; alertLabel = '⚡ ¡A tiro!'; }
+                      else if (pct >= 50) { alertColor = '#60a5fa'; alertLabel = ''; }
+                      else { alertColor = 'rgba(255,255,255,0.2)'; alertLabel = ''; }
 
-                  return (
-                    <div key={p.id} style={{
-                      background: 'rgba(255,255,255,0.05)',
-                      borderRadius: '10px',
-                      padding: '8px 10px',
-                      border: `1px solid ${remaining <= 4 ? alertColor + '88' : 'var(--glass-border)'}`,
-                      transition: 'border-color 0.3s ease',
-                    }}>
-                      {/* Name row */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
-                        <div style={{ fontWeight: '700', fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                          {p.name}
+                      return (
+                        <div key={p.id} style={{
+                          background: isOffline ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.05)',
+                          borderRadius: '10px',
+                          padding: '8px 10px',
+                          border: `1px solid ${isOffline ? 'rgba(255,0,0,0.2)' : (remaining <= 4 ? alertColor + '88' : 'var(--glass-border)')}`,
+                          transition: 'all 0.3s ease',
+                          opacity: isOffline ? 0.6 : 1,
+                        }}>
+                          {/* Name row */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
+                            <div style={{ 
+                              fontWeight: '700', 
+                              fontSize: '0.85rem', 
+                              overflow: 'hidden', 
+                              textOverflow: 'ellipsis', 
+                              whiteSpace: 'nowrap', 
+                              flex: 1,
+                              color: isOffline ? 'var(--text-muted)' : 'white'
+                            }}>
+                              {isOffline && '💤 '}{p.name}
+                            </div>
+                            <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexShrink: 0, marginLeft: '6px' }}>
+                              {isOffline && (
+                                <span style={{ color: '#ef4444', fontSize: '0.65rem', fontWeight: '800', marginRight: '4px' }}>OFFLINE</span>
+                              )}
+                              {p.hasLine && (
+                                <span style={{ background: 'linear-gradient(135deg,#ff8a00,#e52e71)', borderRadius: '6px', padding: '1px 6px', fontSize: '0.7rem', fontWeight: '700' }}>LÍNEA</span>
+                              )}
+                              {p.hasBingo && (
+                                <span style={{ background: 'linear-gradient(135deg,#ff007f,#ff8a00)', borderRadius: '6px', padding: '1px 6px', fontSize: '0.7rem', fontWeight: '700' }}>BINGO</span>
+                              )}
+                              {alertLabel && !isOffline && (
+                                <span style={{ color: alertColor, fontSize: '0.72rem', fontWeight: '700' }}>{alertLabel}</span>
+                              )}
+                              <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{p.markedCount}/{p.cardSize || 16}</span>
+                            </div>
+                          </div>
+                          {/* Progress bar */}
+                          <div style={{ height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '99px', overflow: 'hidden' }}>
+                            <div style={{
+                              height: '100%',
+                              width: `${pct}%`,
+                              background: isOffline
+                                ? 'linear-gradient(90deg, #444, #666)'
+                                : remaining <= 2
+                                ? 'linear-gradient(90deg, #f97316, #facc15)'
+                                : remaining <= 4
+                                ? 'linear-gradient(90deg, #60a5fa, #a78bfa)'
+                                : 'linear-gradient(90deg, var(--primary-color), var(--secondary-color))',
+                              borderRadius: '99px',
+                              transition: 'width 0.4s ease',
+                            }} />
+                          </div>
                         </div>
-                        <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexShrink: 0, marginLeft: '6px' }}>
-                          {p.hasLine && (
-                            <span style={{ background: 'linear-gradient(135deg,#ff8a00,#e52e71)', borderRadius: '6px', padding: '1px 6px', fontSize: '0.7rem', fontWeight: '700' }}>LÍNEA</span>
-                          )}
-                          {p.hasBingo && (
-                            <span style={{ background: 'linear-gradient(135deg,#ff007f,#ff8a00)', borderRadius: '6px', padding: '1px 6px', fontSize: '0.7rem', fontWeight: '700' }}>BINGO</span>
-                          )}
-                          {alertLabel && (
-                            <span style={{ color: alertColor, fontSize: '0.72rem', fontWeight: '700' }}>{alertLabel}</span>
-                          )}
-                          <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{p.markedCount}/{p.cardSize || 16}</span>
-                        </div>
-                      </div>
-                      {/* Progress bar */}
-                      <div style={{ height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '99px', overflow: 'hidden' }}>
-                        <div style={{
-                          height: '100%',
-                          width: `${pct}%`,
-                          background: remaining <= 2
-                            ? 'linear-gradient(90deg, #f97316, #facc15)'
-                            : remaining <= 4
-                            ? 'linear-gradient(90deg, #60a5fa, #a78bfa)'
-                            : 'linear-gradient(90deg, var(--primary-color), var(--secondary-color))',
-                          borderRadius: '99px',
-                          transition: 'width 0.4s ease',
-                        }} />
-                      </div>
-                    </div>
-                  );
-                })
-              }
+                      );
+                    })
+                  }
             </div>
           </div>
 

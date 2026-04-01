@@ -194,25 +194,61 @@ export default function PlayerGame() {
   const progressReportTimer = useRef(null);
   useEffect(() => {
     if (!socket || gameState !== 'PLAYING') return;
+    const playerId = localStorage.getItem('bingo_playerId');
+    if (!playerId) return;
+
     clearTimeout(progressReportTimer.current);
     progressReportTimer.current = setTimeout(() => {
       socket.emit('updateProgress', {
         roomId: roomId.toUpperCase(),
+        playerId,
         markedIndexes: Array.from(markedIndexes),
       });
     }, 300);
   }, [markedIndexes, socket, roomId, gameState]);
 
+  // AUTO-RECONNECT: If we land here and we are not in the room yet
+  useEffect(() => {
+    if (!socket) return;
+    
+    const checkMembership = () => {
+      const savedRoomId = localStorage.getItem('bingo_roomId');
+      const savedPlayerId = localStorage.getItem('bingo_playerId');
+      const savedPlayerName = localStorage.getItem('bingo_playerName');
+
+      if (savedRoomId === roomId.toUpperCase() && savedPlayerId) {
+        // We have a session for this room, let's make sure we are joined
+        socket.emit('joinRoom', { 
+          roomId: savedRoomId, 
+          playerName: savedPlayerName, 
+          playerId: savedPlayerId 
+        });
+      }
+    };
+
+    if (socket.connected) {
+      checkMembership();
+    }
+    
+    socket.on('connect', checkMembership);
+    return () => socket.off('connect', checkMembership);
+  }, [socket, roomId]);
+
   useEffect(() => {
     if (!socket) return;
 
-    socket.on('gameStarted', ({ card }) => {
+    socket.on('gameStarted', ({ card, markedIndexes, currentSong, hasLine, hasBingo, roomLineClaimed }) => {
       setCard(card);
       setGameState('PLAYING');
-      setHasClaimedLine(false);
-      setRoomLineClaimed(false);
-      setHasClaimedBingo(false);
-      setMarkedIndexes(new Set());
+      setHasClaimedLine(hasLine || false);
+      setRoomLineClaimed(roomLineClaimed || false);
+      setHasClaimedBingo(hasBingo || false);
+      
+      if (markedIndexes && markedIndexes.length > 0) {
+        setMarkedIndexes(new Set(markedIndexes));
+      } else {
+        setMarkedIndexes(new Set());
+      }
     });
 
     socket.on('bingoWinner', ({ player }) => {
@@ -349,6 +385,7 @@ export default function PlayerGame() {
     setLineSubmitting(true);
     socket.emit('claimWin', {
       roomId: roomId.toUpperCase(),
+      playerId: localStorage.getItem('bingo_playerId'),
       markedIndexes: Array.from(markedIndexes),
       type: 'LINE',
     });
@@ -367,6 +404,7 @@ export default function PlayerGame() {
     setBingoSubmitting(true);
     socket.emit('claimWin', {
       roomId: roomId.toUpperCase(),
+      playerId: localStorage.getItem('bingo_playerId'),
       markedIndexes: Array.from(markedIndexes),
       type: 'BINGO',
     });

@@ -62,63 +62,73 @@ io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`);
 
   // ---> Presenter Events <---
-  socket.on('createRoom', ({ roomId }) => {
-    gameManager.createRoom(roomId, socket.id);
+  socket.on('createRoom', async ({ roomId }) => {
+    await gameManager.createRoom(roomId, socket.id);
     socket.join(roomId);
     console.log(`Room ${roomId} created by ${socket.id}`);
     socket.emit('roomCreated', { roomId });
   });
 
-  socket.on('startGame', ({ roomId, playlist }) => {
-    const room = gameManager.startGame(roomId, playlist);
+  socket.on('startGame', async ({ roomId, playlist }) => {
+    const room = await gameManager.startGame(roomId, playlist);
     if (room.error) return socket.emit('error', room.error);
 
     // Send each player their unique card
     room.players.forEach(p => {
-      io.to(p.socketId).emit('gameStarted', { card: p.card });
+      if (p.socketId) {
+        io.to(p.socketId).emit('gameStarted', { card: p.card });
+      }
     });
     
     // Notify presenter of the final list and status update
     socket.emit('gameStartedPresenter', { players: room.players });
   });
 
-  socket.on('playNextSong', ({ roomId, song }) => {
-    const room = gameManager.getRoom(roomId);
-    if (!room) return;
-    
-    room.playedSongs.push(song.id);
-    room.currentSong = song;
-    
+  socket.on('playNextSong', async ({ roomId, song }) => {
+    await gameManager.nextSong(roomId, song);
     io.to(roomId).emit('newSongPlayed', { song });
   });
 
   // ---> Player Events <---
-  socket.on('joinRoom', ({ roomId, playerName }) => {
-    const playerId = Math.random().toString(36).substring(2, 9);
-    const result = gameManager.joinRoom(roomId, { id: playerId, name: playerName, socketId: socket.id });
+  socket.on('joinRoom', async ({ roomId, playerName, playerId }) => {
+    // If no playerId provided, generate one
+    const pId = playerId || Math.random().toString(36).substring(2, 9);
+    const result = await gameManager.joinRoom(roomId, { id: pId, name: playerName, socketId: socket.id });
     
     if (result.error) {
       return socket.emit('joinError', { message: result.error });
     }
 
     socket.join(roomId);
-    socket.emit('joinSuccess', { player: result.player, roomId });
+    socket.emit('joinSuccess', { 
+      player: result.player, 
+      roomId,
+      reconnect: !!result.reconnect
+    });
     
+    // If it's a reconnection during a running game, send them their card and state immediately.
+    if (result.room.status === 'PLAYING') {
+      socket.emit('gameStarted', { 
+        card: result.player.card,
+        markedIndexes: result.player.markedIndexes || [],
+        currentSong: result.room.currentSong,
+        hasLine: result.player.hasLine,
+        hasBingo: result.player.hasBingo,
+        roomLineClaimed: result.room.lineLocked
+      });
+    }
+
     // Notify room (Presenter) that a new player joined
     io.to(roomId).emit('playerJoined', { player: result.player, players: result.room.players });
   });
 
   // Player sends their current marked indexes so server can track progress
-  socket.on('updateProgress', ({ roomId, markedIndexes }) => {
+  socket.on('updateProgress', async ({ roomId, playerId, markedIndexes }) => {
     const rId = roomId ? roomId.toUpperCase() : '';
     const room = gameManager.getRoom(rId);
     if (!room) return;
 
-    const player = room.players.find(p => p.socketId === socket.id);
-    if (!player) return;
-
-    // Update the player's marked songs count for analytics
-    player.markedCount = Array.isArray(markedIndexes) ? markedIndexes.length : 0;
+    await gameManager.updatePlayerMarked(rId, playerId, markedIndexes);
 
     // Broadcast updated progress to presenter
     const presenterSocket = room.presenter;
@@ -129,11 +139,12 @@ io.on('connection', (socket) => {
       cardSize: 16,
       hasLine: p.hasLine || false,
       hasBingo: p.hasBingo || false,
+      isConnected: p.isConnected
     }));
     io.to(presenterSocket).emit('playersProgress', { players: progressData });
   });
 
-  socket.on('claimWin', ({ roomId, markedIndexes, type }) => {
+  socket.on('claimWin', async ({ roomId, playerId, markedIndexes, type }) => {
     const rId = roomId ? roomId.toUpperCase() : '';
     const room = gameManager.getRoom(rId);
     
@@ -142,7 +153,7 @@ io.on('connection', (socket) => {
       return;
     }
 
-    const player = room.players.find(p => p.socketId === socket.id);
+    const player = room.players.find(p => p.id === playerId);
     if (!player) return;
 
     console.log(`[ClaimWin] ${player.name} claiming ${type} in ${rId}. Marks:`, markedIndexes);
@@ -152,46 +163,26 @@ io.on('connection', (socket) => {
 
     // --- Anti-duplicate checks ---
     if (type === 'LINE') {
-      // If this player already has a line, reject silently
       if (player.hasLine) {
-        console.log(`[ClaimWin] ${player.name} already has LINE - ignoring duplicate`);
         socket.emit('winInvalid', { reason: 'ALREADY_CLAIMED_LINE', type });
         return;
       }
-      
-      // If room already has a line winner and we are in strict mode, reject
-      // BUT if their marks are invalid, we STILL want them to be penalized!
       if (room.lineLocked && result.reason !== 'INVALID_MARKS') {
-        console.log(`[ClaimWin] Line already locked in room ${rId} - ignoring`);
         socket.emit('winInvalid', { reason: 'LINE_ALREADY_CLAIMED', type });
         return;
       }
     }
 
     if (type === 'BINGO') {
-      if (player.hasBingo) {
-        console.log(`[ClaimWin] ${player.name} already has BINGO - ignoring duplicate`);
-        return;
-      }
+      if (player.hasBingo) return;
     }
 
-    console.log(`[ClaimWin] Validation Result for ${player.name}:`, result);
-
     if (result.success) {
+      await gameManager.setWinState(rId, playerId, type);
       if (type === 'BINGO') {
-        player.hasBingo = true;
-        room.status = 'FINISHED';
         io.to(rId).emit('bingoWinner', { player });
       } else {
-        // LINE: mark player as having a line, lock room line so nobody else can claim
-        player.hasLine = true;
-        room.lineLocked = true;
-
-        // Notify ALL players (so everyone gets the popup)
         io.to(rId).emit('lineWinner', { player });
-
-        // After 30 seconds, unlock line so next round can happen (optional reset)
-        // room.lineLocked stays true until game ends or presenter resets
       }
     } else {
       socket.emit('winInvalid', { 
@@ -202,14 +193,23 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('disconnect', () => {
+  socket.on('disconnect', async () => {
     console.log(`User disconnected: ${socket.id}`);
-    const result = gameManager.removePlayer(socket.id);
+    const result = await gameManager.disconnectPlayer(socket.id);
     if (result) {
       if (result.roomDestroyed) {
+        // Option: Wait a bit before destroying room too? 
+        // For now keep immediate room destruction if presenter leaves.
         io.to(result.roomId).emit('roomDestroyed');
       } else {
-        io.to(result.roomId).emit('playerLeft', { players: result.room.players });
+        // For players, we broadcast they are "disconnected" but keep them in the list
+        io.to(result.roomId).emit('playerLeft', { 
+          playerId: result.player.id,
+          players: result.room.players 
+        });
+
+        // Grace period: if they don't reconnect in 60 seconds, we could remove them 
+        // but for persistence it's better to just leave them as "disconnected"
       }
     }
   });
