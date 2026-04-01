@@ -417,8 +417,27 @@ export default function PresenterDashboard() {
         {error && <div style={{ color: '#ff4d4d', marginBottom: '1rem', padding: '10px', background: 'rgba(255,0,0,0.1)', borderRadius: '8px' }}>{error}</div>}
         
         <div style={{ marginBottom: '1rem' }}>
+          <label style={{ display: 'block', margin: '1.5rem 0 0.5rem 0', color: 'var(--text-muted)' }}>
+            Spotify Playlist URL manual
+          </label>
+          <input 
+            type="text" 
+            placeholder="https://open.spotify.com/playlist/..." 
+            value={playlistUrl}
+            onChange={(e) => {
+              setPlaylistUrl(e.target.value);
+              setSelectedPresetId('');
+            }}
+          />
+        </div>
+        
+        <button onClick={handleCreateRoom} disabled={loading} style={{ width: '100%', margin: '1.5rem 0' }}>
+          {loading ? 'Fetching Playlist...' : 'Create Room'}
+        </button>
+
+        <div style={{ marginTop: '1.25rem' }}>
           <label style={{ display: 'block', margin: '0 0 0.75rem 0', color: 'var(--text-muted)' }}>
-            Playlists predefinidas
+            O elige una playlist predefinida
           </label>
 
           {presetLoading ? (
@@ -470,24 +489,7 @@ export default function PresenterDashboard() {
               })}
             </div>
           )}
-
-          <label style={{ display: 'block', margin: '1.5rem 0 0.5rem 0', color: 'var(--text-muted)' }}>
-            Spotify Playlist URL manual
-          </label>
-          <input 
-            type="text" 
-            placeholder="https://open.spotify.com/playlist/..." 
-            value={playlistUrl}
-            onChange={(e) => {
-              setPlaylistUrl(e.target.value);
-              setSelectedPresetId('');
-            }}
-          />
         </div>
-        
-        <button onClick={handleCreateRoom} disabled={loading} style={{ width: '100%', margin: '1.5rem 0' }}>
-          {loading ? 'Fetching Playlist...' : 'Create Room'}
-        </button>
       </div>
     );
   }
