@@ -233,6 +233,15 @@ class GameManager {
   async reconnectPresenter(roomId, presenterSessionId, socketId) {
     const room = await this.getRoom(roomId);
     if (!room) return { error: 'Room not found' };
+
+    // If the room was rehydrated from persistence, the in-memory presenter
+    // session can be missing even though the live room is still valid.
+    // In that case we re-bind the current presenter session instead of
+    // locking the real host out of an active game.
+    if (!room.presenterSessionId && presenterSessionId) {
+      room.presenterSessionId = presenterSessionId;
+    }
+
     if (!room.presenterSessionId || room.presenterSessionId !== presenterSessionId) {
       return { error: 'Presenter session not valid' };
     }
