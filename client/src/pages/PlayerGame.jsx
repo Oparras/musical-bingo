@@ -266,11 +266,14 @@ export default function PlayerGame() {
       else setBingoAttempts(attemptsLeft ?? 0);
 
       if (reason === 'OUT_OF_ATTEMPTS') {
-        addToast(`🚫 Te has quedado sin intentos para el ${type}.`, 'error', 6000);
+        addToast(`Te has quedado sin intentos para ${type === 'LINE' ? 'la linea' : 'el bingo'}.`, 'error', 6000);
         return;
       }
+
       if (reason === 'INVALID_MARKS') {
-        addToast(`🚫 ¡Canciones mal marcadas detectadas! Se han desmarcado automáticamente.`, 'error', 6000);
+        const attemptLabel = attemptsLeft === 1 ? 'Te queda 1 intento.' : `Te quedan ${attemptsLeft} intentos.`;
+        const typeLabel = type === 'LINE' ? 'la linea' : 'el bingo';
+        addToast(`Habias marcado canciones que aun no han sonado. Se han desmarcado automaticamente y has gastado un intento para ${typeLabel}. ${attemptLabel}`, 'error', 7000);
         if (invalidIndexes) {
           setMarkedIndexes(prev => {
             const next = new Set(prev);
@@ -279,7 +282,9 @@ export default function PlayerGame() {
           });
         }
       } else {
-        addToast(`🎯 ¡Todavía no está completo! Te quedan ${attemptsLeft} intentos.`, 'error', 4000);
+        const typeLabel = type === 'LINE' ? 'la linea' : 'el bingo';
+        const attemptLabel = attemptsLeft === 1 ? 'Te queda 1 intento.' : `Te quedan ${attemptsLeft} intentos.`;
+        addToast(`Aun no tienes completo ${typeLabel}. ${attemptLabel}`, 'error', 5000);
       }
     };
 

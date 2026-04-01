@@ -90,6 +90,15 @@ export default function PresenterScreen() {
     [playersProgress]
   );
 
+  const closestPlayers = useMemo(() => {
+    return sortedPlayers
+      .map((player) => ({
+        ...player,
+        remaining: Math.max((player.cardSize || 16) - (player.markedCount || 0), 0),
+      }))
+      .filter((player) => player.remaining > 0 && player.remaining <= 2);
+  }, [sortedPlayers]);
+
   return (
     <div className="screen-shell">
       <div className="screen-backdrop" />
@@ -115,6 +124,11 @@ export default function PresenterScreen() {
           )}
           {winner && (
             <div className="screen-highlight screen-highlight--winner">BINGO: {winner.name}</div>
+          )}
+          {!winner && closestPlayers.length > 0 && (
+            <div className="screen-highlight" style={{ background: 'linear-gradient(135deg, #2563eb, #7c3aed)' }}>
+              {closestPlayers[0].name} esta a {closestPlayers[0].remaining} {closestPlayers[0].remaining === 1 ? 'cancion' : 'canciones'} del bingo
+            </div>
           )}
 
           <div className="screen-song-card">
