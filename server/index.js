@@ -10,14 +10,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Health check endpoint (used by UptimeRobot / self-ping to prevent Render sleep)
+// Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), rooms: 'in-memory' });
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 const spotifyApi = require('./spotifyApi');
 
-// -> REST API Routes <-
 app.get('/api/spotify/login-url', (req, res) => {
   try {
     const url = spotifyApi.getAuthorizationUrl();
@@ -41,16 +40,7 @@ app.get('/api/spotify/playlist/:id', async (req, res) => {
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: (origin, callback) => {
-      // Allow local dev, all vercel.app subdomains, and direct access
-      const allowed = !origin || 
-        origin.includes('localhost') || 
-        origin.includes('127.0.0.1') || 
-        origin.includes('vercel.app') ||
-        origin.includes('netlify.app') ||
-        (process.env.FRONTEND_URL && origin === process.env.FRONTEND_URL);
-      callback(null, allowed);
-    },
+    origin: '*',
     methods: ['GET', 'POST']
   }
 });
@@ -65,7 +55,6 @@ io.on('connection', (socket) => {
   socket.on('createRoom', async ({ roomId }) => {
     await gameManager.createRoom(roomId, socket.id);
     socket.join(roomId);
-    console.log(`Room ${roomId} created by ${socket.id}`);
     socket.emit('roomCreated', { roomId });
   });
 
@@ -73,14 +62,12 @@ io.on('connection', (socket) => {
     const room = await gameManager.startGame(roomId, playlist);
     if (room.error) return socket.emit('error', room.error);
 
-    // Send each player their unique card
     room.players.forEach(p => {
       if (p.socketId) {
         io.to(p.socketId).emit('gameStarted', { card: p.card });
       }
     });
     
-    // Notify presenter of the final list and status update
     socket.emit('gameStartedPresenter', { players: room.players });
   });
 
@@ -91,14 +78,13 @@ io.on('connection', (socket) => {
 
   // ---> Player Events <---
   socket.on('joinRoom', async ({ roomId, playerName, playerId }) => {
-    // If no playerId provided, generate one
     const pId = playerId || Math.random().toString(36).substring(2, 9);
     
     const result = await gameManager.joinRoom(roomId, { 
       id: pId, 
       name: playerName, 
       socketId: socket.id,
-      isReconnecting: !!playerId // FLAG FOR BYPASSING LOCKS
+      isReconnecting: !!playerId
     });
     
     if (result.error) {
@@ -112,7 +98,6 @@ io.on('connection', (socket) => {
       reconnect: !!result.reconnect
     });
     
-    // If it's a reconnection during a running game, send them their card and state immediately.
     if (result.room.status === 'PLAYING') {
       socket.emit('gameStarted', { 
         card: result.player.card,
@@ -124,11 +109,9 @@ io.on('connection', (socket) => {
       });
     }
 
-    // Notify room (Presenter) that a new player joined
     io.to(roomId).emit('playerJoined', { player: result.player, players: result.room.players });
   });
 
-  // Player sends their current marked indexes so server can track progress
   socket.on('updateProgress', async ({ roomId, playerId, markedIndexes }) => {
     const rId = roomId ? roomId.toUpperCase() : '';
     const room = await gameManager.getRoom(rId);
@@ -136,51 +119,31 @@ io.on('connection', (socket) => {
 
     await gameManager.updatePlayerMarked(rId, playerId, markedIndexes);
 
-    // Broadcast updated progress to presenter
-    const presenterSocket = room.presenter;
     const progressData = room.players.map(p => ({
       id: p.id,
       name: p.name,
       markedCount: p.markedCount || 0,
       cardSize: 16,
-      hasLine: p.hasLine || false,
-      hasBingo: p.hasBingo || false,
-      isConnected: p.isConnected
+      isConnected: p.isConnected,
+      hasLine: p.hasLine,
+      hasBingo: p.hasBingo
     }));
-    io.to(presenterSocket).emit('playersProgress', { players: progressData });
+    io.to(room.presenter).emit('playersProgress', { players: progressData });
   });
 
   socket.on('claimWin', async ({ roomId, playerId, markedIndexes, type }) => {
     const rId = roomId ? roomId.toUpperCase() : '';
     const room = await gameManager.getRoom(rId);
-    
-    if (!room) {
-      console.log(`[ClaimWin] Room not found: ${rId}`);
-      return;
-    }
+    if (!room) return;
 
     const player = room.players.find(p => p.id === playerId);
     if (!player) return;
 
-    console.log(`[ClaimWin] ${player.name} claiming ${type} in ${rId}. Marks:`, markedIndexes);
-
     const marks = Array.isArray(markedIndexes) ? markedIndexes.map(Number) : [];
     const result = checkWin(player.card, room.playedSongs, marks, type);
 
-    // --- Anti-duplicate checks ---
-    if (type === 'LINE') {
-      if (player.hasLine) {
-        socket.emit('winInvalid', { reason: 'ALREADY_CLAIMED_LINE', type });
-        return;
-      }
-      if (room.lineLocked && result.reason !== 'INVALID_MARKS') {
-        socket.emit('winInvalid', { reason: 'LINE_ALREADY_CLAIMED', type });
-        return;
-      }
-    }
-
-    if (type === 'BINGO') {
-      if (player.hasBingo) return;
+    if (type === 'LINE' && (player.hasLine || room.lineLocked)) {
+       if (result.success === false || result.reason !== 'INVALID_MARKS') return;
     }
 
     if (result.success) {
@@ -191,22 +154,17 @@ io.on('connection', (socket) => {
         io.to(rId).emit('lineWinner', { player });
       }
     } else {
-      socket.emit('winInvalid', { 
-        reason: result.reason, 
-        invalidIndexes: result.invalidIndexes,
-        type
-      });
+      socket.emit('winInvalid', { reason: result.reason, type });
     }
   });
 
   socket.on('disconnect', async () => {
-    console.log(`User disconnected: ${socket.id}`);
     const result = await gameManager.disconnectPlayer(socket.id);
     if (result) {
       if (result.roomDestroyed) {
         io.to(result.roomId).emit('roomDestroyed');
       } else {
-         io.to(result.roomId).emit('playerLeft', { 
+        io.to(result.roomId).emit('playerLeft', { 
           playerId: result.player.id,
           players: result.room.players 
         });
@@ -219,22 +177,12 @@ const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
 
-  // --- Keep-alive self-ping (prevents Render free tier from sleeping) ---
   const selfUrl = process.env.RENDER_EXTERNAL_URL || process.env.BACKEND_URL;
   if (selfUrl) {
-    const PING_INTERVAL_MS = 4 * 60 * 1000; // every 4 minutes
     setInterval(async () => {
       try {
-        const url = `${selfUrl}/health`;
-        const res = await fetch(url);
-        const data = await res.json();
-        console.log(`[Keep-alive] Ping OK at ${data.timestamp}`);
-      } catch (err) {
-        console.warn('[Keep-alive] Ping failed:', err.message);
-      }
-    }, PING_INTERVAL_MS);
-    console.log(`[Keep-alive] Self-ping active every 4 minutes → ${selfUrl}/health`);
-  } else {
-    console.log('[Keep-alive] No RENDER_EXTERNAL_URL or BACKEND_URL set - self-ping disabled (local dev)');
+        await fetch(`${selfUrl}/health`);
+      } catch (err) {}
+    }, 4 * 60 * 1000);
   }
 });
