@@ -122,6 +122,8 @@ export default function PlayerGame() {
   // Claim state — prevent duplicate submissions
   const [hasClaimedLine, setHasClaimedLine] = useState(false);
   const [hasClaimedBingo, setHasClaimedBingo] = useState(false);
+  const [roomLineClaimed, setRoomLineClaimed] = useState(false);
+  const [lineSubmitting, setLineSubmitting] = useState(false);
   const [bingoSubmitting, setBingoSubmitting] = useState(false);
   const [lineAttempts, setLineAttempts] = useState(3);
   const [bingoAttempts, setBingoAttempts] = useState(3);
