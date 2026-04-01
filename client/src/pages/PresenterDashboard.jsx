@@ -120,6 +120,11 @@ export default function PresenterDashboard() {
     () => players.filter((player) => player?.isConnected !== false),
     [players]
   );
+  const playlistTracks = useMemo(() => {
+    if (Array.isArray(playlist?.tracks)) return playlist.tracks;
+    if (Array.isArray(playlist)) return playlist;
+    return [];
+  }, [playlist]);
 
   const persistSpotifySession = useCallback((response) => {
     if (!response?.access_token) return;
@@ -182,7 +187,11 @@ export default function PresenterDashboard() {
 
     setRoomId(state.roomId || '');
     setPlayers(state.players || []);
-    setPlaylist(state.playlist || null);
+    if (Array.isArray(state.playlist)) {
+      setPlaylist({ tracks: state.playlist });
+    } else {
+      setPlaylist(state.playlist || null);
+    }
     setPlayedSongs(state.playedSongs || []);
     setCurrentSong(state.currentSong || null);
     setWinner(state.winner || null);
@@ -544,7 +553,7 @@ export default function PresenterDashboard() {
     if (connectedWaitingPlayers.length === 0) {
       return setError('Wait for at least 1 connected player to join');
     }
-    socket.emit('startGame', { roomId, playlist: playlist.tracks });
+    socket.emit('startGame', { roomId, playlist: playlistTracks });
   };
 
   const openPresenterScreen = () => {
@@ -562,7 +571,7 @@ export default function PresenterDashboard() {
 
   const playNextSong = async () => {
     if (!playlist) return;
-    const remaining = playlist.tracks.filter(t => !playedSongs.find(ps => ps.id === t.id));
+    const remaining = playlistTracks.filter(t => !playedSongs.find(ps => ps.id === t.id));
     if (remaining.length === 0) return alert('No more songs in playlist!');
 
     const randomTrack = remaining[Math.floor(Math.random() * remaining.length)];
