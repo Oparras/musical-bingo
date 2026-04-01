@@ -125,7 +125,7 @@ io.on('connection', (socket) => {
   // Player sends their current marked indexes so server can track progress
   socket.on('updateProgress', async ({ roomId, playerId, markedIndexes }) => {
     const rId = roomId ? roomId.toUpperCase() : '';
-    const room = gameManager.getRoom(rId);
+    const room = await gameManager.getRoom(rId);
     if (!room) return;
 
     await gameManager.updatePlayerMarked(rId, playerId, markedIndexes);
@@ -146,7 +146,7 @@ io.on('connection', (socket) => {
 
   socket.on('claimWin', async ({ roomId, playerId, markedIndexes, type }) => {
     const rId = roomId ? roomId.toUpperCase() : '';
-    const room = gameManager.getRoom(rId);
+    const room = await gameManager.getRoom(rId);
     
     if (!room) {
       console.log(`[ClaimWin] Room not found: ${rId}`);

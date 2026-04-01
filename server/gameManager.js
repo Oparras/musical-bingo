@@ -38,8 +38,52 @@ class GameManager {
     return roomData;
   }
 
-  getRoom(roomId) {
-    return this.rooms.get(roomId);
+  async getRoom(roomId) {
+    let room = this.rooms.get(roomId);
+    if (room) return room;
+
+    if (this.persistenceEnabled) {
+      try {
+        const { data: dbRoom, error: roomError } = await supabase
+          .from('rooms')
+          .select('*')
+          .eq('id', roomId)
+          .single();
+
+        if (dbRoom) {
+          const { data: dbPlayers, error: playersError } = await supabase
+            .from('players')
+            .select('*')
+            .eq('room_id', roomId);
+
+          room = {
+            id: dbRoom.id,
+            status: dbRoom.status,
+            host_id: dbRoom.host_id,
+            playlist: dbRoom.playlist_data || [],
+            playedSongs: dbRoom.played_songs_ids || [],
+            currentSong: dbRoom.current_song,
+            lineLocked: dbRoom.line_locked,
+            players: (dbPlayers || []).map(p => ({
+              id: p.id,
+              name: p.nickname,
+              socketId: p.socket_id,
+              isConnected: p.is_connected,
+              card: p.card_data || [],
+              markedIndexes: p.marked_cells || [],
+              hasLine: p.has_line,
+              hasBingo: p.has_bingo,
+              markedCount: (p.marked_cells || []).length
+            }))
+          };
+          this.rooms.set(roomId, room);
+          return room;
+        }
+      } catch (err) {
+        console.error('Supabase Error (getRoom):', err);
+      }
+    }
+    return null;
   }
 
   async joinRoom(roomId, player) {
