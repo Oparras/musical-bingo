@@ -110,8 +110,8 @@ class GameManager {
       return { room, player: existingPlayer, reconnect: true };
     }
 
-    // 2. If it's a NEW player join, check room status
-    if (room.status !== 'WAITING') {
+    // 2. If it's a NEW player join (no playerId provided), check room status
+    if (room.status !== 'WAITING' && !player.id) {
       return { error: 'Game already in progress' };
     }
 
@@ -120,22 +120,29 @@ class GameManager {
       return { error: 'Name already taken in this room' };
     }
 
-    // Check if player already exists in room (re-join/re-connect)
-    let newPlayer = room.players.find(p => p.id === player.id);
-    if (newPlayer) {
-      newPlayer.socketId = player.socketId;
-      newPlayer.isConnected = true;
-    } else {
+    // 3. Initialize new session if not found in list (Late joiner or hydrate miss)
+    let newPlayer = existingPlayer;
+    if (!newPlayer) {
       newPlayer = {
-        id: player.id,
+        id: player.id || Math.random().toString(36).substring(2, 9),
         name: player.name,
         socketId: player.socketId,
         isConnected: true,
         card: [], 
-        markedSongs: [],
+        markedIndexes: [],
         hasLine: false,
-        hasBingo: false
+        hasBingo: false,
+        markedCount: 0
       };
+      
+      // If joining late while game has started, assign a card as fallback 
+      if (room.status !== 'WAITING' && room.playlist && room.playlist.length > 0) {
+        try {
+          newPlayer.card = generateBingoCard(room.playlist, 16);
+        } catch (err) {
+          console.error('Late joiner card generation error:', err);
+        }
+      }
       room.players.push(newPlayer);
     }
 
