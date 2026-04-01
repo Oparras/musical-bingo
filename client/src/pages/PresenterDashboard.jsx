@@ -151,6 +151,7 @@ export default function PresenterDashboard() {
     setWinner(state.winner || null);
     setLineWinnerName(state.lineWinnerName || null);
     setPlayersProgress(state.playersProgress || []);
+    setHideSongInfo(!!state.hideSongInfo);
     setGameState(state.gameState || 'WAITING');
 
     if (state.roomId) {
@@ -420,6 +421,9 @@ export default function PresenterDashboard() {
     socket.on('presenterReconnected', () => {
       setPresenterDisconnectedUntil(null);
     });
+    socket.on('hideSongInfoChanged', ({ hideSongInfo: hide }) => {
+      setHideSongInfo(!!hide);
+    });
     socket.on('roomDestroyed', () => {
       window.localStorage.removeItem(PRESENTER_ROOM_KEY);
       setRoomId('');
@@ -448,6 +452,7 @@ export default function PresenterDashboard() {
       socket.off('playersProgress'); socket.off('lineWinner');
       socket.off('presenterRoomState'); socket.off('presenterReconnectFailed');
       socket.off('presenterDisconnected'); socket.off('presenterReconnected');
+      socket.off('hideSongInfoChanged');
       socket.off('roomDestroyed');
     };
   }, [hydratePresenterState, socket]);
@@ -483,6 +488,19 @@ export default function PresenterDashboard() {
   const handleStartGame = () => {
     if (players.length === 0) return setError('Wait for at least 1 player to join');
     socket.emit('startGame', { roomId, playlist: playlist.tracks });
+  };
+
+  const openPresenterScreen = () => {
+    if (!roomId) return;
+    window.open(`/presenter/screen/${roomId}`, '_blank', 'noopener,noreferrer');
+  };
+
+  const toggleBlindMode = () => {
+    const nextValue = !hideSongInfo;
+    setHideSongInfo(nextValue);
+    if (socket && roomId) {
+      socket.emit('setHideSongInfo', { roomId, hideSongInfo: nextValue });
+    }
   };
 
   const playSongOnSpotify = async (uri) => {
@@ -722,7 +740,12 @@ export default function PresenterDashboard() {
         </div>
 
         {error && <div style={{ color: '#ff4d4d', marginBottom: '1rem' }}>{error}</div>}
-        <button onClick={handleStartGame} style={{ fontSize: '1.2rem', padding: '15px 40px' }}>Start Game</button>
+        <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button onClick={handleStartGame} style={{ fontSize: '1.2rem', padding: '15px 40px' }}>Start Game</button>
+          <button className="secondary" onClick={openPresenterScreen} style={{ fontSize: '1rem', padding: '15px 30px' }}>
+            Abrir pantalla TV
+          </button>
+        </div>
       </div>
     );
   }
@@ -769,9 +792,16 @@ export default function PresenterDashboard() {
               🚪 Salir
             </button>
             <h2 style={{ fontSize: isMobile ? '1.1rem' : undefined, margin: 0, flex: 1, textAlign: 'center' }}>🎤 Panel</h2>
+            <button
+              className="secondary"
+              onClick={openPresenterScreen}
+              style={{ padding: '8px 15px', fontSize: '0.8rem', borderRadius: '10px' }}
+            >
+              TV
+            </button>
             <button 
               className="secondary" 
-              onClick={() => setHideSongInfo(!hideSongInfo)}
+              onClick={toggleBlindMode}
               style={{ padding: '8px 15px', fontSize: '0.8rem', borderRadius: '10px' }}
             >
               {hideSongInfo ? '👁️ Info' : '🙈 Ciego'}

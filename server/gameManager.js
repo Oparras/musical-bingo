@@ -37,6 +37,7 @@ class GameManager {
       winner: room.players.find((player) => player.hasBingo) || null,
       lineWinnerName: room.players.find((player) => player.hasLine)?.name || null,
       playersProgress: this.getPlayersProgress(room),
+      hideSongInfo: !!room.hideSongInfo,
       presenterConnected: room.presenterConnected !== false,
       presenterReconnectDeadline: room.presenterReconnectDeadline || null
     };
@@ -73,6 +74,7 @@ class GameManager {
       presenterReconnectDeadline: null,
       destroyTimeout: null,
       status: 'WAITING',
+      hideSongInfo: false,
       players: [],
       playedSongs: [],
       playedSongsDetailed: [],
@@ -131,6 +133,7 @@ class GameManager {
             playedSongsDetailed: [],
             currentSong: dbRoom.current_song,
             lineLocked: dbRoom.line_locked,
+            hideSongInfo: false,
             players: (dbPlayers || []).map(p => ({
               id: p.id,
               name: p.nickname,
@@ -359,6 +362,7 @@ class GameManager {
     room.playedSongs = [];
     room.playedSongsDetailed = [];
     room.currentSong = null;
+    room.hideSongInfo = false;
     
     // Generate unique cards for all players
     const updates = [];
@@ -415,6 +419,14 @@ class GameManager {
         console.error('Supabase Error (nextSong):', err);
       }
     }
+  }
+
+  async setHideSongInfo(roomId, hideSongInfo) {
+    const room = this.rooms.get(roomId);
+    if (!room) return null;
+
+    room.hideSongInfo = !!hideSongInfo;
+    return room;
   }
 }
 

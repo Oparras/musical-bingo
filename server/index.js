@@ -92,6 +92,16 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('presenterReconnected');
   });
 
+  socket.on('screenJoinRoom', async ({ roomId }) => {
+    const room = await gameManager.getRoom(roomId);
+    if (!room) {
+      return socket.emit('screenJoinFailed', { message: 'Room not found' });
+    }
+
+    socket.join(roomId);
+    socket.emit('screenRoomState', gameManager.getPresenterState(room));
+  });
+
   socket.on('startGame', async ({ roomId, playlist }) => {
     const room = await gameManager.startGame(roomId, playlist);
     if (room.error) return socket.emit('error', room.error);
@@ -103,11 +113,18 @@ io.on('connection', (socket) => {
     });
 
     socket.emit('gameStartedPresenter', { players: room.players });
+    io.to(roomId).emit('screenRoomState', gameManager.getPresenterState(room));
   });
 
   socket.on('playNextSong', async ({ roomId, song }) => {
     await gameManager.nextSong(roomId, song);
     io.to(roomId).emit('newSongPlayed', { song });
+  });
+
+  socket.on('setHideSongInfo', async ({ roomId, hideSongInfo }) => {
+    const room = await gameManager.setHideSongInfo(roomId, hideSongInfo);
+    if (!room) return;
+    io.to(roomId).emit('hideSongInfoChanged', { hideSongInfo: room.hideSongInfo });
   });
 
   // ---> Player Events <---
@@ -148,6 +165,7 @@ io.on('connection', (socket) => {
     }
 
     io.to(roomId).emit('playerJoined', { player: result.player, players: result.room.players });
+    io.to(roomId).emit('screenRoomState', gameManager.getPresenterState(result.room));
   });
 
   socket.on('updateProgress', async ({ roomId, playerId, markedIndexes }) => {
@@ -243,6 +261,7 @@ io.on('connection', (socket) => {
           playerId: result.player.id,
           players: result.room.players
         });
+        io.to(result.roomId).emit('screenRoomState', gameManager.getPresenterState(result.room));
       }
     }
   });
