@@ -73,7 +73,9 @@ class GameManager {
               markedIndexes: p.marked_cells || [],
               hasLine: p.has_line,
               hasBingo: p.has_bingo,
-              markedCount: (p.marked_cells || []).length
+              markedCount: (p.marked_cells || []).length,
+              lineAttempts: p.line_attempts ?? 3,
+              bingoAttempts: p.bingo_attempts ?? 3
             }))
           };
           this.rooms.set(roomId, room);
@@ -127,7 +129,9 @@ class GameManager {
       markedIndexes: [],
       hasLine: false,
       hasBingo: false,
-      markedCount: 0
+      markedCount: 0,
+      lineAttempts: 3,
+      bingoAttempts: 3
     };
     
     // Safety: If joining late while game has started, assign a card so they aren't empty

@@ -95,7 +95,9 @@ io.on('connection', (socket) => {
     socket.emit('joinSuccess', { 
       player: result.player, 
       roomId,
-      reconnect: !!result.reconnect
+      reconnect: !!result.reconnect,
+      lineAttempts: result.player.lineAttempts ?? 3,
+      bingoAttempts: result.player.bingoAttempts ?? 3
     });
     
     if (result.room.status === 'PLAYING') {
@@ -105,7 +107,9 @@ io.on('connection', (socket) => {
         currentSong: result.room.currentSong,
         hasLine: result.player.hasLine,
         hasBingo: result.player.hasBingo,
-        roomLineClaimed: result.room.lineLocked
+        roomLineClaimed: result.room.lineLocked,
+        lineAttempts: result.player.lineAttempts ?? 3,
+        bingoAttempts: result.player.bingoAttempts ?? 3
       });
     }
 
@@ -146,6 +150,13 @@ io.on('connection', (socket) => {
        if (result.success === false || result.reason !== 'INVALID_MARKS') return;
     }
 
+    // --- Check Attempts ---
+    const attempts = type === 'LINE' ? (player.lineAttempts ?? 3) : (player.bingoAttempts ?? 3);
+    if (attempts <= 0) {
+      socket.emit('winInvalid', { reason: 'OUT_OF_ATTEMPTS', type });
+      return;
+    }
+
     if (result.success) {
       await gameManager.setWinState(rId, playerId, type);
       if (type === 'BINGO') {
@@ -154,7 +165,26 @@ io.on('connection', (socket) => {
         io.to(rId).emit('lineWinner', { player });
       }
     } else {
-      socket.emit('winInvalid', { reason: result.reason, type });
+      // Subtract attempt
+      if (type === 'LINE') player.lineAttempts = (player.lineAttempts || 3) - 1;
+      else player.bingoAttempts = (player.bingoAttempts || 3) - 1;
+
+      // Persist attempts to Supabase
+      if (gameManager.persistenceEnabled) {
+         supabase.from('players').update({
+            line_attempts: player.lineAttempts,
+            bingo_attempts: player.bingoAttempts
+         }).eq('id', playerId).then(({error}) => {
+            if(error) console.error('Error persisting attempts:', error);
+         });
+      }
+
+      socket.emit('winInvalid', { 
+        reason: result.reason, 
+        invalidIndexes: result.invalidIndexes, // Restoration of the unmark feature!
+        type,
+        attemptsLeft: type === 'LINE' ? player.lineAttempts : player.bingoAttempts
+      });
     }
   });
 

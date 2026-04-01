@@ -122,9 +122,9 @@ export default function PlayerGame() {
   // Claim state — prevent duplicate submissions
   const [hasClaimedLine, setHasClaimedLine] = useState(false);
   const [hasClaimedBingo, setHasClaimedBingo] = useState(false);
-  const [roomLineClaimed, setRoomLineClaimed] = useState(false);
-  const [lineSubmitting, setLineSubmitting] = useState(false);
   const [bingoSubmitting, setBingoSubmitting] = useState(false);
+  const [lineAttempts, setLineAttempts] = useState(3);
+  const [bingoAttempts, setBingoAttempts] = useState(3);
 
   // Toast system
   const [toasts, setToasts] = useState([]);
@@ -241,14 +241,20 @@ export default function PlayerGame() {
       setCard(card);
       setGameState('PLAYING');
       setHasClaimedLine(hasLine || false);
-      setRoomLineClaimed(roomLineClaimed || false);
       setHasClaimedBingo(hasBingo || false);
+      setLineAttempts(lineAttempts ?? 3);
+      setBingoAttempts(bingoAttempts ?? 3);
       
       if (markedIndexes && markedIndexes.length > 0) {
         setMarkedIndexes(new Set(markedIndexes));
       } else {
         setMarkedIndexes(new Set());
       }
+    });
+
+    socket.on('joinSuccess', ({ lineAttempts, bingoAttempts }) => {
+       setLineAttempts(lineAttempts ?? 3);
+       setBingoAttempts(bingoAttempts ?? 3);
     });
 
     socket.on('bingoWinner', ({ player }) => {
@@ -282,11 +288,20 @@ export default function PlayerGame() {
         addToast('⚠️ Alguien ya cantó línea en esta ronda', 'error', 3000);
         return;
       }
+      
+      if (type === 'LINE') setLineAttempts(attemptsLeft ?? 0);
+      else setBingoAttempts(attemptsLeft ?? 0);
+
+      if (reason === 'OUT_OF_ATTEMPTS') {
+        addToast(`🚫 Te has quedado sin intentos para el ${type}. ¡Ten más cuidado!`, 'error', 6000);
+        return;
+      }
+
       if (reason === 'INVALID_MARKS') {
         if (type === 'LINE' && roomLineClaimed) {
-          addToast('📢 ¡La línea ya fue cantada! Y además, tienes canciones marcadas que aún no han sonado. Se desmarcarán.', 'error', 6000);
+          addToast(`📢 ¡La línea ya fue cantada! Y además, tienes canciones que aún no han sonado. Te quedan ${attemptsLeft} intentos.`, 'error', 6000);
         } else {
-          addToast('🚫 ¡Tienes canciones marcadas que aún no han sonado! Se desmarcarán.', 'error', 5000);
+          addToast(`🚫 ¡Canciones mal marcadas detectadas! Se han desmarcado automáticamente. Te quedan ${attemptsLeft} intentos.`, 'error', 6000);
         }
         
         if (invalidIndexes && invalidIndexes.length > 0) {
@@ -298,8 +313,8 @@ export default function PlayerGame() {
         }
       } else {
         const msg = type === 'BINGO'
-          ? '🎲 ¡Todavía no tienes el cartón completo! Sigue jugando para el Bingo.'
-          : '🎯 ¡Todavía no tienes una línea completa! Revisa bien tu cartón.';
+          ? `🎲 ¡Todavía no tienes el cartón completo! Te quedan ${attemptsLeft} intentos.`
+          : `🎯 ¡Todavía no tienes una línea completa! Te quedan ${attemptsLeft} intentos.`;
         addToast(msg, 'error', 4000);
       }
     });
@@ -556,7 +571,7 @@ export default function PlayerGame() {
                 flex: 1,
                 padding: '15px',
                 fontSize: '1.2rem',
-                background: hasClaimedLine
+                background: (hasClaimedLine || lineAttempts <= 0)
                   ? 'linear-gradient(90deg, #555, #444)'
                   : lineSubmitting
                   ? 'linear-gradient(90deg, #888, #666)'
@@ -564,24 +579,24 @@ export default function PlayerGame() {
                   ? 'linear-gradient(90deg, #ff8a00, #e52e71)'
                   : 'linear-gradient(90deg, #333, #444)',
                 borderRadius: '15px',
-                boxShadow: (hasClaimedLine || !localLine) ? 'none' : '0 5px 15px rgba(229, 46, 113, 0.3)',
+                boxShadow: (hasClaimedLine || !localLine || lineAttempts <= 0) ? 'none' : '0 5px 15px rgba(229, 46, 113, 0.3)',
                 WebkitTapHighlightColor: 'transparent',
-                opacity: (hasClaimedLine || !localLine) ? 0.6 : 1,
-                cursor: (hasClaimedLine || !localLine) ? 'not-allowed' : 'pointer',
+                opacity: (hasClaimedLine || !localLine || lineAttempts <= 0) ? 0.6 : 1,
+                cursor: (hasClaimedLine || !localLine || lineAttempts <= 0) ? 'not-allowed' : 'pointer',
                 transition: 'all 0.2s ease',
               }}
             >
-              {hasClaimedLine ? '✅ LÍNEA' : lineSubmitting ? '⏳ ...' : '📢 ¡LÍNEA!'}
+              {hasClaimedLine ? '✅ LÍNEA' : lineSubmitting ? '⏳ ...' : lineAttempts <= 0 ? '🚫 BLOQUEADO' : `📢 LÍNEA (${lineAttempts})`}
             </button>
             <button
               onClick={claimBingo}
-              disabled={hasClaimedBingo || bingoSubmitting || !localBingo}
+              disabled={hasClaimedBingo || bingoSubmitting || !localBingo || bingoAttempts <= 0}
               className={canClaimBingo && !hasClaimedBingo ? 'claim-btn-pulse' : ''}
               style={{
                 flex: 1.5,
                 padding: '15px',
                 fontSize: '1.2rem',
-                background: hasClaimedBingo
+                background: (hasClaimedBingo || bingoAttempts <= 0)
                   ? 'linear-gradient(90deg, #555, #444)'
                   : bingoSubmitting
                   ? 'linear-gradient(90deg, #888, #666)'
@@ -589,14 +604,14 @@ export default function PlayerGame() {
                   ? 'linear-gradient(90deg, #ff007f, #ff8a00)'
                   : 'linear-gradient(90deg, #333, #444)',
                 borderRadius: '15px',
-                boxShadow: (hasClaimedBingo || !localBingo) ? 'none' : '0 5px 15px rgba(255, 0, 127, 0.3)',
+                boxShadow: (hasClaimedBingo || !localBingo || bingoAttempts <= 0) ? 'none' : '0 5px 15px rgba(255, 0, 127, 0.3)',
                 WebkitTapHighlightColor: 'transparent',
-                opacity: (hasClaimedBingo || !localBingo) ? 0.6 : 1,
-                cursor: (hasClaimedBingo || !localBingo) ? 'not-allowed' : 'pointer',
+                opacity: (hasClaimedBingo || !localBingo || bingoAttempts <= 0) ? 0.6 : 1,
+                cursor: (hasClaimedBingo || !localBingo || bingoAttempts <= 0) ? 'not-allowed' : 'pointer',
                 transition: 'all 0.2s ease',
               }}
             >
-              {hasClaimedBingo ? '✅ BINGO' : bingoSubmitting ? '⏳ ...' : '🎉 ¡BINGO!'}
+              {hasClaimedBingo ? '✅ BINGO' : bingoSubmitting ? '⏳ ...' : bingoAttempts <= 0 ? '🚫 BLOQUEADO' : `🎉 BINGO (${bingoAttempts})`}
             </button>
           </div>
         </div>
