@@ -5,15 +5,77 @@ class GameManager {
   constructor() {
     this.rooms = new Map(); // Keep in-memory for speed, but sync with DB
     this.persistenceEnabled = !!(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY);
+    this.presenterReconnectGraceMs = 3 * 60 * 1000;
+    this.roomExpiredHandler = null;
   }
 
-  async createRoom(roomId, presenterSocketId) {
+  setRoomExpiredHandler(handler) {
+    this.roomExpiredHandler = handler;
+  }
+
+  getPlayersProgress(room) {
+    return room.players.map((player) => ({
+      id: player.id,
+      name: player.name,
+      markedCount: player.markedCount || 0,
+      cardSize: 16,
+      isConnected: player.isConnected,
+      hasLine: player.hasLine,
+      hasBingo: player.hasBingo
+    }));
+  }
+
+  getPresenterState(room) {
+    return {
+      roomId: room.id,
+      gameState: room.status === 'PLAYING' ? 'PLAYING' : room.status === 'FINISHED' ? 'FINISHED' : 'WAITING',
+      roomStatus: room.status,
+      players: room.players,
+      playlist: room.playlist || null,
+      playedSongs: Array.isArray(room.playedSongsDetailed) ? room.playedSongsDetailed : [],
+      currentSong: room.currentSong || null,
+      winner: room.players.find((player) => player.hasBingo) || null,
+      lineWinnerName: room.players.find((player) => player.hasLine)?.name || null,
+      playersProgress: this.getPlayersProgress(room),
+      presenterConnected: room.presenterConnected !== false,
+      presenterReconnectDeadline: room.presenterReconnectDeadline || null
+    };
+  }
+
+  schedulePresenterRoomExpiry(room) {
+    if (room.destroyTimeout) {
+      clearTimeout(room.destroyTimeout);
+    }
+
+    room.presenterReconnectDeadline = Date.now() + this.presenterReconnectGraceMs;
+    room.destroyTimeout = setTimeout(() => {
+      this.rooms.delete(room.id);
+      if (typeof this.roomExpiredHandler === 'function') {
+        this.roomExpiredHandler(room.id);
+      }
+    }, this.presenterReconnectGraceMs);
+  }
+
+  clearPresenterRoomExpiry(room) {
+    if (room.destroyTimeout) {
+      clearTimeout(room.destroyTimeout);
+      room.destroyTimeout = null;
+    }
+    room.presenterReconnectDeadline = null;
+  }
+
+  async createRoom(roomId, presenterSocketId, presenterSessionId) {
     const roomData = {
       id: roomId,
       presenter: presenterSocketId,
+      presenterSessionId,
+      presenterConnected: true,
+      presenterReconnectDeadline: null,
+      destroyTimeout: null,
       status: 'WAITING',
       players: [],
       playedSongs: [],
+      playedSongsDetailed: [],
       currentSong: null,
     };
     
@@ -59,9 +121,14 @@ class GameManager {
           room = {
             id: dbRoom.id,
             status: dbRoom.status,
-            host_id: dbRoom.host_id,
+            presenter: dbRoom.host_id,
+            presenterConnected: true,
+            presenterSessionId: null,
+            presenterReconnectDeadline: null,
+            destroyTimeout: null,
             playlist: dbRoom.playlist_data || [],
             playedSongs: dbRoom.played_songs_ids || [],
+            playedSongsDetailed: [],
             currentSong: dbRoom.current_song,
             lineLocked: dbRoom.line_locked,
             players: (dbPlayers || []).map(p => ({
@@ -86,6 +153,31 @@ class GameManager {
       }
     }
     return null;
+  }
+
+  async reconnectPresenter(roomId, presenterSessionId, socketId) {
+    const room = await this.getRoom(roomId);
+    if (!room) return { error: 'Room not found' };
+    if (!room.presenterSessionId || room.presenterSessionId !== presenterSessionId) {
+      return { error: 'Presenter session not valid' };
+    }
+
+    room.presenter = socketId;
+    room.presenterConnected = true;
+    this.clearPresenterRoomExpiry(room);
+
+    if (this.persistenceEnabled) {
+      try {
+        await supabase
+          .from('rooms')
+          .update({ host_id: socketId })
+          .eq('id', roomId);
+      } catch (err) {
+        console.error('Supabase Error (reconnectPresenter):', err);
+      }
+    }
+
+    return { room };
   }
 
   async joinRoom(roomId, player) {
@@ -244,7 +336,15 @@ class GameManager {
         return { roomId, player, room };
       }
       if (room.presenter === socketId) {
-        return { roomDestroyed: true, roomId };
+        room.presenterConnected = false;
+        room.presenter = null;
+        this.schedulePresenterRoomExpiry(room);
+        return {
+          roomId,
+          room,
+          presenterDisconnected: true,
+          reconnectDeadline: room.presenterReconnectDeadline
+        };
       }
     }
     return null;
@@ -256,6 +356,9 @@ class GameManager {
 
     room.status = 'PLAYING';
     room.playlist = playlist;
+    room.playedSongs = [];
+    room.playedSongsDetailed = [];
+    room.currentSong = null;
     
     // Generate unique cards for all players
     const updates = [];
@@ -297,6 +400,7 @@ class GameManager {
     if (!room) return;
     
     room.playedSongs.push(song.id);
+    room.playedSongsDetailed.push(song);
     room.currentSong = song;
 
     if (this.persistenceEnabled) {

@@ -9,6 +9,11 @@ const isLocalDev = window.location.hostname === 'localhost' || window.location.h
 const SPOTIFY_REDIRECT_URI = isLocalDev 
   ? 'http://127.0.0.1:5173/presenter/dashboard' 
   : `${window.location.origin}/presenter/dashboard`;
+const PRESENTER_SESSION_KEY = 'bingo_presenter_session_id';
+const PRESENTER_ROOM_KEY = 'bingo_presenter_room_id';
+const SPOTIFY_ACCESS_TOKEN_KEY = 'spotify_presenter_token';
+const SPOTIFY_REFRESH_TOKEN_KEY = 'spotify_presenter_refresh_token';
+const SPOTIFY_EXPIRES_AT_KEY = 'spotify_presenter_expires_at';
 
 // PKCE Helper Functions
 const generateRandomString = (length) => {
@@ -69,14 +74,27 @@ const getTrackCountTone = (trackCount) => {
   };
 };
 
+const ensurePresenterSessionId = () => {
+  let sessionId = window.localStorage.getItem(PRESENTER_SESSION_KEY);
+  if (!sessionId) {
+    sessionId = crypto.randomUUID();
+    window.localStorage.setItem(PRESENTER_SESSION_KEY, sessionId);
+  }
+  return sessionId;
+};
+
 export default function PresenterDashboard() {
   const socket = useSocket();
   const navigate = useNavigate();
 
   const [spotifyToken, setSpotifyToken] = useState(null);
+  const [spotifyExpiresAt, setSpotifyExpiresAt] = useState(null);
   const [deviceId, setDeviceId] = useState(null);
   const [playerLoading, setPlayerLoading] = useState(false);
   const playerRef = useRef(null);
+  const refreshTimeoutRef = useRef(null);
+  const presenterSessionIdRef = useRef(ensurePresenterSessionId());
+  const presenterReconnectAttemptedRef = useRef(false);
 
   const [roomId, setRoomId] = useState('');
   const [playlistUrl, setPlaylistUrl] = useState('');
@@ -96,15 +114,90 @@ export default function PresenterDashboard() {
   const [authInput, setAuthInput] = useState('');
   const [playersProgress, setPlayersProgress] = useState([]);
   const [lineWinnerName, setLineWinnerName] = useState(null);
+  const [spotifyWarning, setSpotifyWarning] = useState(null);
+  const [presenterDisconnectedUntil, setPresenterDisconnectedUntil] = useState(null);
+
+  const persistSpotifySession = useCallback((response) => {
+    if (!response?.access_token) return;
+
+    const expiresAt = Date.now() + ((response.expires_in || 3600) - 60) * 1000;
+    window.localStorage.setItem(SPOTIFY_ACCESS_TOKEN_KEY, response.access_token);
+    window.localStorage.setItem(SPOTIFY_EXPIRES_AT_KEY, String(expiresAt));
+    if (response.refresh_token) {
+      window.localStorage.setItem(SPOTIFY_REFRESH_TOKEN_KEY, response.refresh_token);
+    }
+
+    setSpotifyToken(response.access_token);
+    setSpotifyExpiresAt(expiresAt);
+    setSpotifyWarning(null);
+  }, []);
+
+  const clearSpotifySession = useCallback(() => {
+    window.localStorage.removeItem(SPOTIFY_ACCESS_TOKEN_KEY);
+    window.localStorage.removeItem(SPOTIFY_REFRESH_TOKEN_KEY);
+    window.localStorage.removeItem(SPOTIFY_EXPIRES_AT_KEY);
+    setSpotifyToken(null);
+    setSpotifyExpiresAt(null);
+  }, []);
+
+  const hydratePresenterState = useCallback((state) => {
+    if (!state) return;
+
+    setRoomId(state.roomId || '');
+    setPlayers(state.players || []);
+    setPlaylist(state.playlist || null);
+    setPlayedSongs(state.playedSongs || []);
+    setCurrentSong(state.currentSong || null);
+    setWinner(state.winner || null);
+    setLineWinnerName(state.lineWinnerName || null);
+    setPlayersProgress(state.playersProgress || []);
+    setGameState(state.gameState || 'WAITING');
+
+    if (state.roomId) {
+      window.localStorage.setItem(PRESENTER_ROOM_KEY, state.roomId);
+    }
+  }, []);
+
+  const refreshSpotifyToken = useCallback(async () => {
+    const refreshToken = window.localStorage.getItem(SPOTIFY_REFRESH_TOKEN_KEY);
+    if (!refreshToken) {
+      throw new Error('No refresh token available');
+    }
+
+    const response = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        client_id: SPOTIFY_CLIENT_ID,
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.access_token) {
+      throw new Error(data.error_description || data.error || 'Failed to refresh Spotify token');
+    }
+
+    persistSpotifySession({
+      ...data,
+      refresh_token: data.refresh_token || refreshToken,
+    });
+
+    return data.access_token;
+  }, [persistSpotifySession]);
 
   // --- SPOTIFY PKCE AUTH FLOW ---
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    let code = urlParams.get('code');
-    let storedToken = window.localStorage.getItem('spotify_presenter_token');
+    const code = urlParams.get('code');
+    const storedToken = window.localStorage.getItem(SPOTIFY_ACCESS_TOKEN_KEY);
+    const storedExpiry = Number(window.localStorage.getItem(SPOTIFY_EXPIRES_AT_KEY) || 0);
 
     const exchangeToken = async (code) => {
-      let codeVerifier = window.localStorage.getItem('code_verifier');
+      const codeVerifier = window.localStorage.getItem('code_verifier');
       try {
         const payload = {
           method: 'POST',
@@ -123,8 +216,7 @@ export default function PresenterDashboard() {
         const response = await body.json();
         
         if (response.access_token) {
-          window.localStorage.setItem('spotify_presenter_token', response.access_token);
-          setSpotifyToken(response.access_token);
+          persistSpotifySession(response);
           // Clean up URL
           window.history.replaceState({}, document.title, window.location.pathname);
         } else {
@@ -138,10 +230,36 @@ export default function PresenterDashboard() {
     if (code && !storedToken) {
       // We are returning from Spotify Auth
       exchangeToken(code);
-    } else if (storedToken) {
+    } else if (storedToken && storedExpiry > Date.now()) {
       setSpotifyToken(storedToken);
+      setSpotifyExpiresAt(storedExpiry);
+    } else if (window.localStorage.getItem(SPOTIFY_REFRESH_TOKEN_KEY)) {
+      refreshSpotifyToken().catch((err) => {
+        console.error('Spotify refresh on load failed', err);
+        clearSpotifySession();
+      });
     }
-  }, []);
+  }, [clearSpotifySession, persistSpotifySession, refreshSpotifyToken]);
+
+  useEffect(() => {
+    if (!spotifyExpiresAt) return undefined;
+
+    const timeoutMs = Math.max(5000, spotifyExpiresAt - Date.now() - 90 * 1000);
+    refreshTimeoutRef.current = window.setTimeout(() => {
+      refreshSpotifyToken().catch((err) => {
+        console.error('Scheduled Spotify refresh failed', err);
+        setSpotifyWarning('La sesión de Spotify ha caducado. Puedes volver a iniciarla sin cerrar la sala.');
+        clearSpotifySession();
+      });
+    }, timeoutMs);
+
+    return () => {
+      if (refreshTimeoutRef.current) {
+        window.clearTimeout(refreshTimeoutRef.current);
+        refreshTimeoutRef.current = null;
+      }
+    };
+  }, [clearSpotifySession, refreshSpotifyToken, spotifyExpiresAt]);
 
   useEffect(() => {
     if (!spotifyToken) return;
@@ -173,7 +291,7 @@ export default function PresenterDashboard() {
     const scope = 'streaming user-read-email user-read-private user-modify-playback-state';
     const authUrl = new URL("https://accounts.spotify.com/authorize")
 
-    window.localStorage.removeItem('spotify_presenter_token'); // Clear old token
+    clearSpotifySession();
     
     authUrl.search = new URLSearchParams({
       response_type: 'code',
@@ -221,12 +339,17 @@ export default function PresenterDashboard() {
       });
 
       player.addListener('initialization_error', ({ message }) => { console.error("Init err:", message); setPlayerLoading(false); });
-      player.addListener('authentication_error', ({ message }) => { 
-        console.error("Auth err:", message); 
-        window.localStorage.removeItem('spotify_presenter_token');
-        setSpotifyToken(null);
+      player.addListener('authentication_error', async ({ message }) => { 
+        console.error("Auth err:", message);
         setPlayerLoading(false);
-        setError("Spotify session expired. Please log in again.");
+        try {
+          await refreshSpotifyToken();
+          setSpotifyWarning('La sesión de Spotify se renovó automáticamente.');
+        } catch (err) {
+          console.error('Spotify token recovery failed:', err);
+          clearSpotifySession();
+          setSpotifyWarning('Spotify pidió volver a iniciar sesión, pero la sala sigue viva para que puedas reconectar.');
+        }
       });
       player.addListener('account_error', ({ message }) => { console.error("Account err:", message); setPlayerLoading(false); });
 
@@ -239,12 +362,36 @@ export default function PresenterDashboard() {
         playerRef.current.disconnect();
       }
     };
-  }, [spotifyToken]);
+  }, [clearSpotifySession, refreshSpotifyToken, spotifyToken]);
 
   // Socket Events
   useEffect(() => {
     if (!socket) return;
-    socket.on('roomCreated', ({ roomId }) => { setRoomId(roomId); setGameState('WAITING'); });
+    const onSocketConnect = () => {
+      presenterReconnectAttemptedRef.current = false;
+      const savedRoomId = window.localStorage.getItem(PRESENTER_ROOM_KEY);
+      const presenterSessionId = presenterSessionIdRef.current;
+      if (!savedRoomId || !presenterSessionId || presenterReconnectAttemptedRef.current) return;
+
+      presenterReconnectAttemptedRef.current = true;
+      socket.emit('reconnectPresenter', {
+        roomId: savedRoomId,
+        presenterSessionId,
+      });
+    };
+
+    const onSocketDisconnect = () => {
+      presenterReconnectAttemptedRef.current = false;
+    };
+
+    socket.on('connect', onSocketConnect);
+    socket.on('disconnect', onSocketDisconnect);
+    socket.on('roomCreated', ({ roomId }) => {
+      setRoomId(roomId);
+      setGameState('WAITING');
+      setPresenterDisconnectedUntil(null);
+      window.localStorage.setItem(PRESENTER_ROOM_KEY, roomId);
+    });
     socket.on('playerJoined', ({ players }) => setPlayers(players));
     socket.on('playerLeft', ({ players }) => setPlayers(players));
     socket.on('gameStartedPresenter', ({ players }) => {
@@ -258,6 +405,35 @@ export default function PresenterDashboard() {
     socket.on('playersProgress', ({ players }) => {
       setPlayersProgress(players);
     });
+    socket.on('presenterRoomState', (state) => {
+      hydratePresenterState(state);
+      setPresenterDisconnectedUntil(null);
+      setError(null);
+    });
+    socket.on('presenterReconnectFailed', ({ message }) => {
+      window.localStorage.removeItem(PRESENTER_ROOM_KEY);
+      setError(message || 'No se pudo recuperar la sala del presentador.');
+    });
+    socket.on('presenterDisconnected', ({ reconnectDeadline }) => {
+      setPresenterDisconnectedUntil(reconnectDeadline || null);
+    });
+    socket.on('presenterReconnected', () => {
+      setPresenterDisconnectedUntil(null);
+    });
+    socket.on('roomDestroyed', () => {
+      window.localStorage.removeItem(PRESENTER_ROOM_KEY);
+      setRoomId('');
+      setPlayers([]);
+      setPlaylist(null);
+      setPlayedSongs([]);
+      setCurrentSong(null);
+      setPlayersProgress([]);
+      setLineWinnerName(null);
+      setWinner(null);
+      setPresenterDisconnectedUntil(null);
+      setGameState('SETUP');
+      setError('La sala del presentador expiró por desconexión prolongada.');
+    });
     socket.on('lineWinner', ({ player }) => {
       setLineWinnerName(player.name);
       setPlayersProgress(prev => prev.map(p =>
@@ -265,11 +441,16 @@ export default function PresenterDashboard() {
       ));
     });
     return () => {
+      socket.off('connect', onSocketConnect);
+      socket.off('disconnect', onSocketDisconnect);
       socket.off('roomCreated'); socket.off('playerJoined'); socket.off('playerLeft');
       socket.off('gameStartedPresenter'); socket.off('bingoWinner'); socket.off('error');
       socket.off('playersProgress'); socket.off('lineWinner');
+      socket.off('presenterRoomState'); socket.off('presenterReconnectFailed');
+      socket.off('presenterDisconnected'); socket.off('presenterReconnected');
+      socket.off('roomDestroyed');
     };
-  }, [socket]);
+  }, [hydratePresenterState, socket]);
 
   const handleCreateRoom = async () => {
     const pid = selectedPresetId || extractPlaylistId(playlistUrl);
@@ -283,8 +464,15 @@ export default function PresenterDashboard() {
       if (!res.ok) throw new Error(data.error || 'Failed to fetch playlist');
       if (data.tracks.length < 16) throw new Error('Playlist needs at least 16 songs.');
       setPlaylist(data);
+      setPlayedSongs([]);
+      setCurrentSong(null);
+      setWinner(null);
+      setLineWinnerName(null);
       const newRoomId = Math.random().toString(36).substring(2, 6).toUpperCase();
-      socket.emit('createRoom', { roomId: newRoomId });
+      socket.emit('createRoom', {
+        roomId: newRoomId,
+        presenterSessionId: presenterSessionIdRef.current,
+      });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -381,7 +569,7 @@ export default function PresenterDashboard() {
     );
   }
 
-  if (!spotifyToken) {
+  if (!spotifyToken && gameState === 'SETUP') {
     return (
       <div className="glass-panel" style={{ maxWidth: '600px', margin: '15vh auto', textAlign: 'center' }}>
         <h2>Host a Game</h2>
@@ -505,6 +693,19 @@ export default function PresenterDashboard() {
           Abandonar Partida
         </button>
         <h2 className="text-gradient">Detalles de la Sala</h2>
+        {spotifyWarning && (
+          <div style={{ marginBottom: '1rem', padding: '12px', borderRadius: '12px', background: 'rgba(250, 204, 21, 0.12)', color: '#fde68a' }}>
+            {spotifyWarning}
+          </div>
+        )}
+        {!spotifyToken && (
+          <div style={{ marginBottom: '1rem', padding: '12px', borderRadius: '12px', background: 'rgba(239, 68, 68, 0.12)', color: '#fecaca' }}>
+            Spotify no está conectado ahora mismo. La sala sigue activa y puedes volver a iniciar sesión sin echar a los jugadores.
+            <div style={{ marginTop: '10px' }}>
+              <button onClick={handleSpotifyLogin} style={{ background: '#1DB954' }}>Reconectar Spotify</button>
+            </div>
+          </div>
+        )}
         <div style={{ margin: '2rem 0', padding: '2rem', background: 'var(--glass-bg)', borderRadius: '15px' }}>
           <p style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>Players join at URL with PIN:</p>
           <h1 style={{ fontSize: '5rem', letterSpacing: '5px', margin: '10px 0' }}>{roomId}</h1>
@@ -537,6 +738,28 @@ export default function PresenterDashboard() {
         minHeight: 0 
       }}>
         <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
+          {(spotifyWarning || !spotifyToken || presenterDisconnectedUntil) && (
+            <div style={{ marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+              {spotifyWarning && (
+                <div style={{ padding: '12px', borderRadius: '12px', background: 'rgba(250, 204, 21, 0.12)', color: '#fde68a' }}>
+                  {spotifyWarning}
+                </div>
+              )}
+              {!spotifyToken && (
+                <div style={{ padding: '12px', borderRadius: '12px', background: 'rgba(239, 68, 68, 0.12)', color: '#fecaca' }}>
+                  Spotify se desconectó, pero la partida sigue viva. Puedes volver a iniciar sesión y retomar el control.
+                  <div style={{ marginTop: '10px' }}>
+                    <button onClick={handleSpotifyLogin} style={{ background: '#1DB954' }}>Reconectar Spotify</button>
+                  </div>
+                </div>
+              )}
+              {presenterDisconnectedUntil && (
+                <div style={{ padding: '12px', borderRadius: '12px', background: 'rgba(59, 130, 246, 0.12)', color: '#bfdbfe' }}>
+                  El servidor ha dejado margen para que el presentador se reconecte antes de cerrar la sala.
+                </div>
+              )}
+            </div>
+          )}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '10px' }}>
             <button 
               className="secondary" 

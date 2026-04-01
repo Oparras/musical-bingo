@@ -67,14 +67,29 @@ const io = new Server(server, {
 const gameManager = require('./gameManager');
 const { checkWin } = require('./bingoUtils');
 
+gameManager.setRoomExpiredHandler((roomId) => {
+  io.to(roomId).emit('roomDestroyed');
+});
+
 io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`);
 
   // ---> Presenter Events <---
-  socket.on('createRoom', async ({ roomId }) => {
-    await gameManager.createRoom(roomId, socket.id);
+  socket.on('createRoom', async ({ roomId, presenterSessionId }) => {
+    await gameManager.createRoom(roomId, socket.id, presenterSessionId);
     socket.join(roomId);
     socket.emit('roomCreated', { roomId });
+  });
+
+  socket.on('reconnectPresenter', async ({ roomId, presenterSessionId }) => {
+    const result = await gameManager.reconnectPresenter(roomId, presenterSessionId, socket.id);
+    if (result?.error) {
+      return socket.emit('presenterReconnectFailed', { message: result.error });
+    }
+
+    socket.join(roomId);
+    socket.emit('presenterRoomState', gameManager.getPresenterState(result.room));
+    io.to(roomId).emit('presenterReconnected');
   });
 
   socket.on('startGame', async ({ roomId, playlist }) => {
@@ -142,16 +157,10 @@ io.on('connection', (socket) => {
 
     await gameManager.updatePlayerMarked(rId, playerId, markedIndexes);
 
-    const progressData = room.players.map(p => ({
-      id: p.id,
-      name: p.name,
-      markedCount: p.markedCount || 0,
-      cardSize: 16,
-      isConnected: p.isConnected,
-      hasLine: p.hasLine,
-      hasBingo: p.hasBingo
-    }));
-    io.to(room.presenter).emit('playersProgress', { players: progressData });
+    const progressData = gameManager.getPlayersProgress(room);
+    if (room.presenter) {
+      io.to(room.presenter).emit('playersProgress', { players: progressData });
+    }
   });
 
   socket.on('claimWin', async ({ roomId, playerId, markedIndexes, type }) => {
@@ -225,8 +234,10 @@ io.on('connection', (socket) => {
   socket.on('disconnect', async () => {
     const result = await gameManager.disconnectPlayer(socket.id);
     if (result) {
-      if (result.roomDestroyed) {
-        io.to(result.roomId).emit('roomDestroyed');
+      if (result.presenterDisconnected) {
+        io.to(result.roomId).emit('presenterDisconnected', {
+          reconnectDeadline: result.reconnectDeadline
+        });
       } else {
         io.to(result.roomId).emit('playerLeft', {
           playerId: result.player.id,
