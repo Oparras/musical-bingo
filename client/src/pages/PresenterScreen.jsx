@@ -30,6 +30,8 @@ export default function PresenterScreen() {
   const [hideSongInfo, setHideSongInfo] = useState(false);
   const [error, setError] = useState(null);
   const [presenterDisconnected, setPresenterDisconnected] = useState(false);
+  const [countdownValue, setCountdownValue] = useState(null);
+  const [pendingSong, setPendingSong] = useState(null);
 
   useEffect(() => {
     if (!socket || !roomId) return;
@@ -55,9 +57,8 @@ export default function PresenterScreen() {
     });
 
     socket.on('newSongPlayed', ({ song }) => {
-      setCurrentSong(song);
-      setPlayedSongs((prev) => [...prev, song]);
-      setGameState('PLAYING');
+      setPendingSong(song);
+      setCountdownValue(3);
     });
 
     socket.on('playersProgress', ({ players }) => setPlayersProgress(players));
@@ -85,6 +86,25 @@ export default function PresenterScreen() {
     };
   }, [roomId, socket]);
 
+  useEffect(() => {
+    if (!pendingSong || countdownValue === null) return undefined;
+
+    if (countdownValue === 0) {
+      setCurrentSong(pendingSong);
+      setPlayedSongs((prev) => [...prev, pendingSong]);
+      setGameState('PLAYING');
+      setPendingSong(null);
+      setCountdownValue(null);
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      setCountdownValue((prev) => (prev === null ? null : prev - 1));
+    }, 900);
+
+    return () => window.clearTimeout(timer);
+  }, [countdownValue, pendingSong]);
+
   const sortedPlayers = useMemo(
     () => [...playersProgress].sort((a, b) => (b.markedCount || 0) - (a.markedCount || 0)).slice(0, 6),
     [playersProgress]
@@ -102,6 +122,14 @@ export default function PresenterScreen() {
   return (
     <div className="screen-shell">
       <div className="screen-backdrop" />
+      {countdownValue !== null && (
+        <div className="screen-countdown">
+          <div className="screen-countdown__ring">
+            <div className="screen-countdown__label">Siguiente canción en</div>
+            <div className="screen-countdown__value">{countdownValue}</div>
+          </div>
+        </div>
+      )}
       <div className="screen-layout">
         <section className="screen-main glass-panel">
           <div className="screen-topbar">

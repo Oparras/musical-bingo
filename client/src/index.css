@@ -286,6 +286,47 @@ button:disabled {
   z-index: 0;
 }
 
+.screen-countdown {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(7, 10, 25, 0.68);
+  backdrop-filter: blur(10px);
+}
+
+.screen-countdown__ring {
+  width: min(36vw, 340px);
+  height: min(36vw, 340px);
+  border-radius: 999px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at center, rgba(255,255,255,0.08), rgba(255,255,255,0.02) 62%, transparent 63%),
+    linear-gradient(135deg, rgba(255,138,0,0.9), rgba(229,46,113,0.9));
+  box-shadow: 0 0 80px rgba(229, 46, 113, 0.35);
+  animation: countdownPulse 0.9s ease infinite;
+}
+
+.screen-countdown__label {
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: clamp(0.75rem, 1.2vw, 1rem);
+  color: rgba(255,255,255,0.85);
+  margin-bottom: 0.8rem;
+}
+
+.screen-countdown__value {
+  font-size: clamp(5rem, 15vw, 9rem);
+  font-weight: 900;
+  line-height: 1;
+  color: white;
+}
+
 .screen-layout {
   position: relative;
   z-index: 1;
@@ -505,6 +546,11 @@ button:disabled {
   background: linear-gradient(90deg, var(--accent-color), #ff8a00);
 }
 
+@keyframes countdownPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+
 @media (max-width: 768px) {
   .screen-layout {
     grid-template-columns: 1fr;
@@ -513,5 +559,10 @@ button:disabled {
 
   .screen-song-card {
     grid-template-columns: 1fr;
+  }
+
+  .screen-countdown__ring {
+    width: min(62vw, 280px);
+    height: min(62vw, 280px);
   }
 }
