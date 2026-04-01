@@ -99,6 +99,12 @@ export default function PlayerGame() {
     setOverlay({ message, emoji });
   }, []);
 
+  useEffect(() => {
+    if (!overlay) return undefined;
+    const timer = setTimeout(() => setOverlay(null), 2600);
+    return () => clearTimeout(timer);
+  }, [overlay]);
+
   // Inject animations
   useEffect(() => {
     if (!document.getElementById('player-game-animations')) {
@@ -234,7 +240,8 @@ export default function PlayerGame() {
     };
 
     const onLineWinner = ({ player }) => {
-      const isMine = socket.id === player.socketId;
+      const localPlayerId = localStorage.getItem(LS_PLAYER);
+      const isMine = !!localPlayerId && localPlayerId === player.id;
       setRoomLineClaimed(true);
       if (isMine) {
         setHasClaimedLine(true);
@@ -267,6 +274,23 @@ export default function PlayerGame() {
 
       if (reason === 'OUT_OF_ATTEMPTS') {
         addToast(`Te has quedado sin intentos para ${type === 'LINE' ? 'la linea' : 'el bingo'}.`, 'error', 6000);
+        return;
+      }
+
+      if (reason === 'LINE_ALREADY_TAKEN') {
+        setRoomLineClaimed(true);
+        addToast('La linea ya fue cantada. Ese boton queda bloqueado para todos.', 'error', 5000);
+        return;
+      }
+
+      if (reason === 'ALREADY_CLAIMED') {
+        if (type === 'LINE') {
+          setHasClaimedLine(true);
+          setRoomLineClaimed(true);
+        } else {
+          setHasClaimedBingo(true);
+        }
+        addToast(`Ya habias reclamado ${type === 'LINE' ? 'la linea' : 'el bingo'}.`, 'info', 4000);
         return;
       }
 
@@ -359,7 +383,7 @@ export default function PlayerGame() {
   const claimWin = (type) => {
     if (!socket) return;
     if (type === 'LINE') {
-      if (hasClaimedLine || lineAttempts <= 0 || lineSubmitting) return;
+      if (hasClaimedLine || roomLineClaimed || lineAttempts <= 0 || lineSubmitting) return;
       if (!localLine) { addToast('❌ No tienes una línea todavía.', 'error'); return; }
       setLineSubmitting(true);
     } else {
@@ -471,15 +495,15 @@ export default function PlayerGame() {
         <div style={{ display: 'flex', gap: '12px' }}>
           <button
             onClick={() => claimWin('LINE')}
-            disabled={hasClaimedLine || lineAttempts <= 0 || lineSubmitting}
-            className={(!hasClaimedLine && localLine) ? 'claim-btn-pulse' : ''}
+            disabled={hasClaimedLine || roomLineClaimed || lineAttempts <= 0 || lineSubmitting}
+            className={(!hasClaimedLine && !roomLineClaimed && localLine) ? 'claim-btn-pulse' : ''}
             style={{
               flex: 1, padding: '18px', fontSize: '1.2rem', fontWeight: '900',
               borderRadius: '20px', border: 'none', color: 'white',
-              cursor: (hasClaimedLine || lineAttempts <= 0) ? 'not-allowed' : 'pointer',
-              opacity: (hasClaimedLine || lineAttempts <= 0) ? 0.6 : 1,
-              background: (hasClaimedLine || lineAttempts <= 0) ? '#333' : 'linear-gradient(90deg, #ff8a00, #e52e71)',
-              boxShadow: (hasClaimedLine || lineAttempts <= 0) ? 'none' : '0 10px 25px rgba(229, 46, 113, 0.4)',
+              cursor: (hasClaimedLine || roomLineClaimed || lineAttempts <= 0) ? 'not-allowed' : 'pointer',
+              opacity: (hasClaimedLine || roomLineClaimed || lineAttempts <= 0) ? 0.6 : 1,
+              background: (hasClaimedLine || roomLineClaimed || lineAttempts <= 0) ? '#333' : 'linear-gradient(90deg, #ff8a00, #e52e71)',
+              boxShadow: (hasClaimedLine || roomLineClaimed || lineAttempts <= 0) ? 'none' : '0 10px 25px rgba(229, 46, 113, 0.4)',
               transition: 'all 0.3s ease'
             }}
           >
