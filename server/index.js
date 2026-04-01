@@ -91,14 +91,14 @@ io.on('connection', (socket) => {
 
   // ---> Player Events <---
   socket.on('joinRoom', async ({ roomId, playerName, playerId }) => {
-    // Use the provided playerId or generate one
+    // If no playerId provided, generate one
     const pId = playerId || Math.random().toString(36).substring(2, 9);
     
     const result = await gameManager.joinRoom(roomId, { 
       id: pId, 
       name: playerName, 
       socketId: socket.id,
-      isReconnecting: !!playerId // NEW: Flag to bypass locks
+      isReconnecting: !!playerId // FLAG FOR BYPASSING LOCKS
     });
     
     if (result.error) {
@@ -204,18 +204,12 @@ io.on('connection', (socket) => {
     const result = await gameManager.disconnectPlayer(socket.id);
     if (result) {
       if (result.roomDestroyed) {
-        // Option: Wait a bit before destroying room too? 
-        // For now keep immediate room destruction if presenter leaves.
         io.to(result.roomId).emit('roomDestroyed');
       } else {
-        // For players, we broadcast they are "disconnected" but keep them in the list
-        io.to(result.roomId).emit('playerLeft', { 
+         io.to(result.roomId).emit('playerLeft', { 
           playerId: result.player.id,
           players: result.room.players 
         });
-
-        // Grace period: if they don't reconnect in 60 seconds, we could remove them 
-        // but for persistence it's better to just leave them as "disconnected"
       }
     }
   });
@@ -244,5 +238,3 @@ server.listen(PORT, () => {
     console.log('[Keep-alive] No RENDER_EXTERNAL_URL or BACKEND_URL set - self-ping disabled (local dev)');
   }
 });
-/ /   T r i g g e r   d e p l o y   0 4 / 0 1 / 2 0 2 6   1 1 : 5 0 : 5 5  
- 

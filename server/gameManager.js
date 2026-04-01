@@ -90,7 +90,9 @@ class GameManager {
     const room = await this.getRoom(roomId);
     if (!room) return { error: 'Room not found' };
 
-    // 1. Check if player already exists in this room (reconnection)
+    console.log(`[JoinRoom] Attempt: ${player.name} (${player.id}) in ${roomId}. Status: ${room.status}. Reconnecting: ${!!player.isReconnecting}`);
+
+    // 1. Look for existing player in this room record
     let existingPlayer = room.players.find(p => p.id === player.id);
     
     if (existingPlayer) {
@@ -110,57 +112,51 @@ class GameManager {
       return { room, player: existingPlayer, reconnect: true };
     }
 
-    // 2. If it's a NEW player join (no playerId provided in the original request), check room status
+    // 2. If game is in progress and NO playerId provided, error
     if (room.status !== 'WAITING' && !player.isReconnecting) {
       return { error: 'Game already in progress' };
     }
 
-    // Check if name is taken by another player
-    if (room.players.find(p => p.name.toLowerCase() === player.name.toLowerCase())) {
-      return { error: 'Name already taken in this room' };
-    }
-
-    // 3. Initialize new session if not found in list (Late joiner or hydrate miss)
-    let newPlayer = existingPlayer;
-    if (!newPlayer) {
-      newPlayer = {
-        id: player.id || Math.random().toString(36).substring(2, 9),
-        name: player.name,
-        socketId: player.socketId,
-        isConnected: true,
-        card: [], 
-        markedIndexes: [],
-        hasLine: false,
-        hasBingo: false,
-        markedCount: 0
-      };
-      
-      // If joining late while game has started, assign a card as fallback 
-      if (room.status !== 'WAITING' && room.playlist && room.playlist.length > 0) {
-        try {
-          newPlayer.card = generateBingoCard(room.playlist, 16);
-        } catch (err) {
-          console.error('Late joiner card generation error:', err);
-        }
+    // 3. Fallback: Initialize new session for this player (Late joiner or hydrate miss)
+    let newPlayer = {
+      id: player.id || Math.random().toString(36).substring(2, 9),
+      name: player.name,
+      socketId: player.socketId,
+      isConnected: true,
+      card: [], 
+      markedIndexes: [],
+      hasLine: false,
+      hasBingo: false,
+      markedCount: 0
+    };
+    
+    // Safety: If joining late while game has started, assign a card so they aren't empty
+    if (room.status !== 'WAITING' && room.playlist && room.playlist.length > 0) {
+      try {
+        newPlayer.card = generateBingoCard(room.playlist, 16);
+      } catch (err) {
+        console.error('Late joiner card generation error:', err);
       }
-      room.players.push(newPlayer);
     }
+    
+    room.players.push(newPlayer);
 
     if (this.persistenceEnabled) {
       try {
         const { error } = await supabase
           .from('players')
           .upsert({
-            id: player.id,
+            id: newPlayer.id,
             room_id: roomId,
-            nickname: player.name,
-            socket_id: player.socketId,
+            nickname: newPlayer.name,
+            socket_id: newPlayer.socketId,
             is_connected: true,
-            last_seen: new Date().toISOString()
+            last_seen: new Date().toISOString(),
+            card_data: newPlayer.card
           });
-        if (error) console.error('Supabase Error (joinRoom):', error.message);
+        if (error) console.error('Supabase Error (joinRoom persistence):', error.message);
       } catch (err) {
-        console.error('Supabase Error (joinRoom):', err);
+        console.error('Supabase Error (joinRoom persistence):', err);
       }
     }
 
@@ -244,10 +240,6 @@ class GameManager {
         return { roomId, player, room };
       }
       if (room.presenter === socketId) {
-        // Option: Don't destroy immediately, but mark as inactive?
-        // For now, let's keep it simple as the original code destroyed it.
-        // But if we want persistence, we should probably NOT destroy it.
-        // this.rooms.delete(roomId);
         return { roomDestroyed: true, roomId };
       }
     }
