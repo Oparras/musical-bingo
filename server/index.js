@@ -176,9 +176,7 @@ io.on('connection', (socket) => {
     await gameManager.updatePlayerMarked(rId, playerId, markedIndexes);
 
     const progressData = gameManager.getPlayersProgress(room);
-    if (room.presenter) {
-      io.to(room.presenter).emit('playersProgress', { players: progressData });
-    }
+    io.to(rId).emit('playersProgress', { players: progressData });
   });
 
   socket.on('claimWin', async ({ roomId, playerId, markedIndexes, type }) => {

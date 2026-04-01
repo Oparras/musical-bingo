@@ -109,7 +109,7 @@ export default function PresenterDashboard() {
   const [playedSongs, setPlayedSongs] = useState([]);
   const [currentSong, setCurrentSong] = useState(null);
   const [winner, setWinner] = useState(null);
-  const [hideSongInfo, setHideSongInfo] = useState(false);
+  const [publicBlindMode, setPublicBlindMode] = useState(false);
   const [presenterAuth, setPresenterAuth] = useState(false);
   const [authInput, setAuthInput] = useState('');
   const [playersProgress, setPlayersProgress] = useState([]);
@@ -151,7 +151,7 @@ export default function PresenterDashboard() {
     setWinner(state.winner || null);
     setLineWinnerName(state.lineWinnerName || null);
     setPlayersProgress(state.playersProgress || []);
-    setHideSongInfo(!!state.hideSongInfo);
+    setPublicBlindMode(!!state.hideSongInfo);
     setGameState(state.gameState || 'WAITING');
 
     if (state.roomId) {
@@ -422,7 +422,7 @@ export default function PresenterDashboard() {
       setPresenterDisconnectedUntil(null);
     });
     socket.on('hideSongInfoChanged', ({ hideSongInfo: hide }) => {
-      setHideSongInfo(!!hide);
+      setPublicBlindMode(!!hide);
     });
     socket.on('roomDestroyed', () => {
       window.localStorage.removeItem(PRESENTER_ROOM_KEY);
@@ -496,8 +496,8 @@ export default function PresenterDashboard() {
   };
 
   const toggleBlindMode = () => {
-    const nextValue = !hideSongInfo;
-    setHideSongInfo(nextValue);
+    const nextValue = !publicBlindMode;
+    setPublicBlindMode(nextValue);
     if (socket && roomId) {
       socket.emit('setHideSongInfo', { roomId, hideSongInfo: nextValue });
     }
@@ -804,7 +804,7 @@ export default function PresenterDashboard() {
               onClick={toggleBlindMode}
               style={{ padding: '8px 15px', fontSize: '0.8rem', borderRadius: '10px' }}
             >
-              {hideSongInfo ? '👁️ Info' : '🙈 Ciego'}
+              {publicBlindMode ? 'TV con info' : 'TV ciega'}
             </button>
           </div>
           
@@ -812,9 +812,7 @@ export default function PresenterDashboard() {
             {currentSong ? (
               <>
                 <div style={{ width: isMobile ? '140px' : '200px', height: isMobile ? '140px' : '200px', marginBottom: '1rem', borderRadius: '15px', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', flexShrink: 0, position: 'relative' }}>
-                  {hideSongInfo ? (
-                    <div style={{ width: '100%', height: '100%', background: 'linear-gradient(45deg, #1e1b4b, #311936)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '5rem' }}>❓</div>
-                  ) : currentSong.imageUrl ? (
+                  {currentSong.imageUrl ? (
                     <img src={currentSong.imageUrl} alt="Album" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : (
                     <div style={{ width: '100%', height: '100%', background: 'var(--primary-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '3rem' }}>🎵</div>
@@ -822,17 +820,10 @@ export default function PresenterDashboard() {
                 </div>
 
                 <div style={{ textAlign: 'center', minHeight: '80px' }}>
-                  {hideSongInfo ? (
-                    <>
-                      <h2 style={{ marginBottom: '5px', fontSize: isMobile ? '1.5rem' : '2.2rem', color: 'var(--accent-color)' }}>¡Adivina la canción! 🎧</h2>
-                      <p style={{ color: 'var(--text-muted)' }}>Canción #{playedSongs.length} de {playlist?.tracks.length}</p>
-                    </>
-                  ) : (
-                    <>
-                      <h2 style={{ marginBottom: '5px', fontSize: isMobile ? '1.1rem' : '1.8rem' }}>{currentSong.name}</h2>
-                      <p style={{ color: 'var(--text-muted)', fontSize: isMobile ? '0.9rem' : '1.3rem', marginBottom: '0.5rem' }}>{currentSong.artist}</p>
-                    </>
-                  )}
+                  <>
+                    <h2 style={{ marginBottom: '5px', fontSize: isMobile ? '1.1rem' : '1.8rem' }}>{currentSong.name}</h2>
+                    <p style={{ color: 'var(--text-muted)', fontSize: isMobile ? '0.9rem' : '1.3rem', marginBottom: '0.5rem' }}>{currentSong.artist}</p>
+                  </>
                 </div>
                 
                 {spotifyToken && (
@@ -975,19 +966,15 @@ export default function PresenterDashboard() {
           {/* SONG HISTORY */}
           <div className="glass-panel" style={{ flexShrink: 0, maxHeight: isMobile ? '180px' : '200px', overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: '12px' }}>
             <h3 style={{ flexShrink: 0, margin: '0 0 8px 0', fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>
-              {hideSongInfo ? 'Historial (Oculto)' : `Historial (${playedSongs.length})`}
+              {`Historial (${playedSongs.length})`}
             </h3>
             <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
               {playedSongs.slice().reverse().map((song, i) => (
-                <div key={i} style={{ padding: '5px 8px', borderBottom: '1px solid var(--glass-border)', fontSize: '0.8rem', opacity: hideSongInfo ? 0.3 : 1 }}>
-                  {hideSongInfo ? (
-                    <div style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Canción #{playedSongs.length - i} (Oculta)</div>
-                  ) : (
-                    <>
-                      <strong>{song.name}</strong>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{song.artist}</div>
-                    </>
-                  )}
+                <div key={i} style={{ padding: '5px 8px', borderBottom: '1px solid var(--glass-border)', fontSize: '0.8rem' }}>
+                  <>
+                    <strong>{song.name}</strong>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{song.artist}</div>
+                  </>
                 </div>
               ))}
             </div>

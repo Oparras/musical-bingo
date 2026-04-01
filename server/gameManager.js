@@ -13,11 +13,24 @@ class GameManager {
     this.roomExpiredHandler = handler;
   }
 
+  getValidMarkedCount(room, player) {
+    if (!room || !player || !Array.isArray(player.markedIndexes) || !Array.isArray(player.card)) {
+      return 0;
+    }
+
+    const playedSet = new Set((room.playedSongs || []).map((songId) => String(songId)));
+    return player.markedIndexes.reduce((count, index) => {
+      const cardSong = player.card?.[index];
+      if (!cardSong?.songId) return count;
+      return playedSet.has(String(cardSong.songId)) ? count + 1 : count;
+    }, 0);
+  }
+
   getPlayersProgress(room) {
     return room.players.map((player) => ({
       id: player.id,
       name: player.name,
-      markedCount: player.markedCount || 0,
+      markedCount: this.getValidMarkedCount(room, player),
       cardSize: 16,
       isConnected: player.isConnected,
       hasLine: player.hasLine,
@@ -143,11 +156,15 @@ class GameManager {
               markedIndexes: p.marked_cells || [],
               hasLine: p.has_line,
               hasBingo: p.has_bingo,
-              markedCount: (p.marked_cells || []).length,
+              markedCount: 0,
               lineAttempts: p.line_attempts ?? 3,
               bingoAttempts: p.bingo_attempts ?? 3
             }))
           };
+          room.players = room.players.map((player) => ({
+            ...player,
+            markedCount: this.getValidMarkedCount(room, player),
+          }));
           this.rooms.set(roomId, room);
           return room;
         }
@@ -268,8 +285,8 @@ class GameManager {
     const player = room.players.find(p => p.id === playerId);
     if (!player) return;
 
-    player.markedCount = Array.isArray(markedIndexes) ? markedIndexes.length : 0;
-    player.markedIndexes = markedIndexes; // Store full indexes
+    player.markedIndexes = Array.isArray(markedIndexes) ? markedIndexes : [];
+    player.markedCount = this.getValidMarkedCount(room, player);
 
     if (this.persistenceEnabled) {
       try {
