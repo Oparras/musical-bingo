@@ -17,7 +17,6 @@ export const SocketProvider = ({ children }) => {
     const backendUrl = import.meta.env.VITE_BACKEND_URL || defaultBackendUrl;
 
     const newSocket = io(backendUrl, {
-      // Aggressive reconnection so mobile users don't get stuck
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
@@ -28,6 +27,23 @@ export const SocketProvider = ({ children }) => {
     newSocket.on('connect', () => {
       setConnected(true);
       setReconnecting(false);
+
+      // 🔑 FIX PRINCIPAL: Al reconectar, re-emitir joinRoom automáticamente
+      // si el jugador tenía una sesión activa guardada en localStorage
+      const savedRoomId = localStorage.getItem('bingo_roomId');
+      const savedPlayerId = localStorage.getItem('bingo_playerId');
+      const savedPlayerName = localStorage.getItem('bingo_playerName');
+
+      if (savedRoomId && savedPlayerId && savedPlayerName) {
+        // Pequeño delay para asegurar que el socket está listo en el servidor
+        setTimeout(() => {
+          newSocket.emit('joinRoom', {
+            roomId: savedRoomId.toUpperCase(),
+            playerName: savedPlayerName,
+            playerId: savedPlayerId,
+          });
+        }, 300);
+      }
     });
 
     newSocket.on('disconnect', () => {
@@ -50,21 +66,12 @@ export const SocketProvider = ({ children }) => {
   return (
     <SocketContext.Provider value={socket}>
       <ConnectionContext.Provider value={{ connected, reconnecting }}>
-        {/* Global connection status banner */}
         {reconnecting && (
           <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            zIndex: 99999,
+            position: 'fixed', top: 0, left: 0, right: 0, zIndex: 99999,
             background: 'linear-gradient(90deg, #b45309, #d97706)',
-            color: 'white',
-            textAlign: 'center',
-            padding: '10px',
-            fontWeight: '700',
-            fontSize: '0.95rem',
-            letterSpacing: '0.5px',
+            color: 'white', textAlign: 'center', padding: '10px',
+            fontWeight: '700', fontSize: '0.95rem', letterSpacing: '0.5px',
             animation: 'fadeInUp 0.3s ease',
           }}>
             ⚠️ Reconectando con el servidor... No te muevas de la página.
@@ -72,17 +79,10 @@ export const SocketProvider = ({ children }) => {
         )}
         {!connected && !reconnecting && socket && (
           <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            zIndex: 99999,
+            position: 'fixed', top: 0, left: 0, right: 0, zIndex: 99999,
             background: 'linear-gradient(90deg, #991b1b, #dc2626)',
-            color: 'white',
-            textAlign: 'center',
-            padding: '10px',
-            fontWeight: '700',
-            fontSize: '0.95rem',
+            color: 'white', textAlign: 'center', padding: '10px',
+            fontWeight: '700', fontSize: '0.95rem',
           }}>
             ❌ Sin conexión con el servidor. Reintentando...
           </div>

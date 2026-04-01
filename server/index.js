@@ -10,7 +10,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
@@ -39,10 +38,7 @@ app.get('/api/spotify/playlist/:id', async (req, res) => {
 
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST']
-  }
+  cors: { origin: '*', methods: ['GET', 'POST'] }
 });
 
 const gameManager = require('./gameManager');
@@ -67,7 +63,7 @@ io.on('connection', (socket) => {
         io.to(p.socketId).emit('gameStarted', { card: p.card });
       }
     });
-    
+
     socket.emit('gameStartedPresenter', { players: room.players });
   });
 
@@ -79,29 +75,29 @@ io.on('connection', (socket) => {
   // ---> Player Events <---
   socket.on('joinRoom', async ({ roomId, playerName, playerId }) => {
     const pId = playerId || Math.random().toString(36).substring(2, 9);
-    
-    const result = await gameManager.joinRoom(roomId, { 
-      id: pId, 
-      name: playerName, 
+
+    const result = await gameManager.joinRoom(roomId, {
+      id: pId,
+      name: playerName,
       socketId: socket.id,
       isReconnecting: !!playerId
     });
-    
+
     if (result.error) {
       return socket.emit('joinError', { message: result.error });
     }
 
     socket.join(roomId);
-    socket.emit('joinSuccess', { 
-      player: result.player, 
+    socket.emit('joinSuccess', {
+      player: result.player,
       roomId,
       reconnect: !!result.reconnect,
       lineAttempts: result.player.lineAttempts ?? 3,
       bingoAttempts: result.player.bingoAttempts ?? 3
     });
-    
+
     if (result.room.status === 'PLAYING') {
-      socket.emit('gameStarted', { 
+      socket.emit('gameStarted', {
         card: result.player.card,
         markedIndexes: result.player.markedIndexes || [],
         currentSong: result.room.currentSong,
@@ -143,19 +139,31 @@ io.on('connection', (socket) => {
     const player = room.players.find(p => p.id === playerId);
     if (!player) return;
 
-    const marks = Array.isArray(markedIndexes) ? markedIndexes.map(Number) : [];
-    const result = checkWin(player.card, room.playedSongs, marks, type);
-
-    if (type === 'LINE' && (player.hasLine || room.lineLocked)) {
-       if (result.success === false || result.reason !== 'INVALID_MARKS') return;
+    // ── FIX: Si el jugador ya tiene línea/bingo válido, no procesar de nuevo ──
+    if (type === 'LINE' && player.hasLine) {
+      socket.emit('winInvalid', { reason: 'ALREADY_CLAIMED', type });
+      return;
+    }
+    if (type === 'BINGO' && player.hasBingo) {
+      socket.emit('winInvalid', { reason: 'ALREADY_CLAIMED', type });
+      return;
     }
 
-    // --- Check Attempts ---
+    // ── FIX: Línea ya reclamada por otro jugador ──────────────────────────────
+    if (type === 'LINE' && room.lineLocked) {
+      socket.emit('winInvalid', { reason: 'LINE_ALREADY_TAKEN', type });
+      return;
+    }
+
+    // ── Check intentos ────────────────────────────────────────────────────────
     const attempts = type === 'LINE' ? (player.lineAttempts ?? 3) : (player.bingoAttempts ?? 3);
     if (attempts <= 0) {
       socket.emit('winInvalid', { reason: 'OUT_OF_ATTEMPTS', type });
       return;
     }
+
+    const marks = Array.isArray(markedIndexes) ? markedIndexes.map(Number) : [];
+    const result = checkWin(player.card, room.playedSongs, marks, type);
 
     if (result.success) {
       await gameManager.setWinState(rId, playerId, type);
@@ -165,23 +173,26 @@ io.on('connection', (socket) => {
         io.to(rId).emit('lineWinner', { player });
       }
     } else {
-      // Subtract attempt
-      if (type === 'LINE') player.lineAttempts = (player.lineAttempts || 3) - 1;
-      else player.bingoAttempts = (player.bingoAttempts || 3) - 1;
+      // Restar intento
+      if (type === 'LINE') player.lineAttempts = (player.lineAttempts ?? 3) - 1;
+      else player.bingoAttempts = (player.bingoAttempts ?? 3) - 1;
 
-      // Persist attempts to Supabase
+      // Persistir intentos si está habilitado
       if (gameManager.persistenceEnabled) {
-         supabase.from('players').update({
+        const supabase = gameManager.supabase;
+        if (supabase) {
+          supabase.from('players').update({
             line_attempts: player.lineAttempts,
             bingo_attempts: player.bingoAttempts
-         }).eq('id', playerId).then(({error}) => {
-            if(error) console.error('Error persisting attempts:', error);
-         });
+          }).eq('id', playerId).then(({ error }) => {
+            if (error) console.error('Error persisting attempts:', error);
+          });
+        }
       }
 
-      socket.emit('winInvalid', { 
-        reason: result.reason, 
-        invalidIndexes: result.invalidIndexes, // Restoration of the unmark feature!
+      socket.emit('winInvalid', {
+        reason: result.reason,
+        invalidIndexes: result.invalidIndexes,
         type,
         attemptsLeft: type === 'LINE' ? player.lineAttempts : player.bingoAttempts
       });
@@ -194,9 +205,9 @@ io.on('connection', (socket) => {
       if (result.roomDestroyed) {
         io.to(result.roomId).emit('roomDestroyed');
       } else {
-        io.to(result.roomId).emit('playerLeft', { 
+        io.to(result.roomId).emit('playerLeft', {
           playerId: result.player.id,
-          players: result.room.players 
+          players: result.room.players
         });
       }
     }
@@ -212,7 +223,7 @@ server.listen(PORT, () => {
     setInterval(async () => {
       try {
         await fetch(`${selfUrl}/health`);
-      } catch (err) {}
+      } catch (err) { }
     }, 4 * 60 * 1000);
   }
 });
