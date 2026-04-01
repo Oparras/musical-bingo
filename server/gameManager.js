@@ -87,7 +87,7 @@ class GameManager {
   }
 
   async joinRoom(roomId, player) {
-    const room = this.rooms.get(roomId);
+    const room = await this.getRoom(roomId);
     if (!room) return { error: 'Room not found' };
 
     // 1. Check if player already exists in this room (reconnection)
@@ -98,10 +98,14 @@ class GameManager {
       existingPlayer.isConnected = true;
       
       if (this.persistenceEnabled) {
-        await supabase
-          .from('players')
-          .update({ is_connected: true, socket_id: player.socketId, last_seen: new Date().toISOString() })
-          .eq('id', player.id);
+        try {
+          await supabase
+            .from('players')
+            .update({ is_connected: true, socket_id: player.socketId, last_seen: new Date().toISOString() })
+            .eq('id', player.id);
+        } catch (err) {
+          console.error('Supabase Error (joinRoom reconnect):', err);
+        }
       }
       return { room, player: existingPlayer, reconnect: true };
     }
@@ -111,7 +115,7 @@ class GameManager {
       return { error: 'Game already in progress' };
     }
 
-    // Check if name is taken by another UNKNOWN player
+    // Check if name is taken by another player
     if (room.players.find(p => p.name.toLowerCase() === player.name.toLowerCase())) {
       return { error: 'Name already taken in this room' };
     }
