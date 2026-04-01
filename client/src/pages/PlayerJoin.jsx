@@ -55,8 +55,19 @@ export default function PlayerJoin() {
     setLoading(true);
     setError(null);
     
-    const playerId = isResume ? localStorage.getItem('bingo_playerId') : null;
-    socket.emit('joinRoom', { roomId: roomId.toUpperCase(), playerName, playerId });
+    const savedRoomId = localStorage.getItem('bingo_roomId');
+    const savedPlayerId = localStorage.getItem('bingo_playerId');
+    
+    // Automatically use saved player ID if the room PIN matches, regardless of which button clicked
+    const effectivePlayerId = (isResume || roomId.toUpperCase() === savedRoomId?.toUpperCase()) 
+      ? savedPlayerId 
+      : null;
+
+    socket.emit('joinRoom', { 
+      roomId: roomId.toUpperCase(), 
+      playerName, 
+      playerId: effectivePlayerId 
+    });
   };
 
   return (
