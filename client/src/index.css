@@ -270,39 +270,6 @@ button:disabled {
   letter-spacing: 0.02em;
 }
 
-.presenter-countdown-banner {
-  width: 100%;
-  max-width: 420px;
-  margin-bottom: 1rem;
-  padding: 1rem 1.25rem;
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: linear-gradient(135deg, rgba(37, 117, 252, 0.18), rgba(106, 17, 203, 0.26));
-  text-align: center;
-  animation: fadeInUp 0.25s ease;
-}
-
-.presenter-countdown-banner__kicker {
-  color: var(--text-muted);
-  font-size: 0.82rem;
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
-}
-
-.presenter-countdown-banner__title {
-  margin-top: 0.45rem;
-  font-size: 1.2rem;
-  font-weight: 700;
-}
-
-.presenter-countdown-banner__value {
-  margin-top: 0.75rem;
-  font-size: 2.8rem;
-  font-weight: 800;
-  line-height: 1;
-  color: #fff;
-}
-
 .screen-shell {
   position: relative;
   min-height: 100vh;
@@ -319,7 +286,7 @@ button:disabled {
   z-index: 0;
 }
 
-.screen-countdown {
+.screen-celebration {
   position: fixed;
   inset: 0;
   z-index: 3;
@@ -330,34 +297,63 @@ button:disabled {
   backdrop-filter: blur(10px);
 }
 
-.screen-countdown__ring {
-  width: min(36vw, 340px);
-  height: min(36vw, 340px);
-  border-radius: 999px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background:
-    radial-gradient(circle at center, rgba(255,255,255,0.08), rgba(255,255,255,0.02) 62%, transparent 63%),
-    linear-gradient(135deg, rgba(255,138,0,0.9), rgba(229,46,113,0.9));
-  box-shadow: 0 0 80px rgba(229, 46, 113, 0.35);
-  animation: countdownPulse 0.9s ease infinite;
+.screen-celebration__card {
+  position: relative;
+  z-index: 1;
+  width: min(78vw, 760px);
+  padding: 2.5rem 2rem;
+  border-radius: 32px;
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.4);
+  animation: fadeInUp 0.35s ease;
 }
 
-.screen-countdown__label {
+.screen-celebration--line .screen-celebration__card {
+  background: linear-gradient(135deg, rgba(37, 117, 252, 0.92), rgba(124, 58, 237, 0.92));
+}
+
+.screen-celebration--bingo .screen-celebration__card {
+  background: linear-gradient(135deg, rgba(255, 0, 127, 0.94), rgba(255, 138, 0, 0.94));
+}
+
+.screen-celebration__eyebrow {
   text-transform: uppercase;
-  letter-spacing: 0.18em;
-  font-size: clamp(0.75rem, 1.2vw, 1rem);
-  color: rgba(255,255,255,0.85);
-  margin-bottom: 0.8rem;
+  letter-spacing: 0.24em;
+  font-size: clamp(0.8rem, 1.2vw, 1rem);
+  color: rgba(255, 255, 255, 0.78);
 }
 
-.screen-countdown__value {
-  font-size: clamp(5rem, 15vw, 9rem);
+.screen-celebration__title {
+  margin-top: 0.8rem;
+  font-size: clamp(3rem, 10vw, 7rem);
+  line-height: 0.9;
   font-weight: 900;
-  line-height: 1;
   color: white;
+}
+
+.screen-celebration__name {
+  margin-top: 0.9rem;
+  font-size: clamp(1.5rem, 3vw, 2.6rem);
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.screen-celebration__confetti {
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle, rgba(255,255,255,0.95) 0 4px, transparent 5px),
+    radial-gradient(circle, rgba(250,204,21,0.95) 0 4px, transparent 5px),
+    radial-gradient(circle, rgba(34,197,94,0.95) 0 4px, transparent 5px),
+    radial-gradient(circle, rgba(59,130,246,0.95) 0 4px, transparent 5px),
+    radial-gradient(circle, rgba(244,114,182,0.95) 0 4px, transparent 5px);
+  background-size: 18% 22%, 20% 24%, 16% 20%, 22% 25%, 19% 23%;
+  background-position: 8% -10%, 28% -18%, 52% -12%, 76% -15%, 92% -8%;
+  background-repeat: repeat-x;
+  opacity: 0.9;
+  animation: confettiFall 2.4s linear forwards;
+  pointer-events: none;
 }
 
 .screen-layout {
@@ -424,6 +420,7 @@ button:disabled {
   font-weight: 900;
   background: linear-gradient(135deg, #ff8a00, #e52e71);
   box-shadow: 0 20px 40px rgba(229, 46, 113, 0.28);
+  animation: highlightBurst 0.45s ease;
 }
 
 .screen-highlight--winner {
@@ -579,9 +576,29 @@ button:disabled {
   background: linear-gradient(90deg, var(--accent-color), #ff8a00);
 }
 
-@keyframes countdownPulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.04); }
+@keyframes confettiFall {
+  0% {
+    transform: translateY(-8%);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(24%);
+    opacity: 0;
+  }
+}
+
+@keyframes highlightBurst {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 @media (max-width: 768px) {
@@ -594,8 +611,8 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
-  .screen-countdown__ring {
-    width: min(62vw, 280px);
-    height: min(62vw, 280px);
+  .screen-celebration__card {
+    width: min(88vw, 520px);
+    padding: 2rem 1.25rem;
   }
 }

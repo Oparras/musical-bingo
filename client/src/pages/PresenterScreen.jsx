@@ -30,11 +30,10 @@ export default function PresenterScreen() {
   const [hideSongInfo, setHideSongInfo] = useState(false);
   const [error, setError] = useState(null);
   const [presenterDisconnected, setPresenterDisconnected] = useState(false);
-  const [countdownValue, setCountdownValue] = useState(null);
-  const [pendingSong, setPendingSong] = useState(null);
+  const [celebration, setCelebration] = useState(null);
 
   useEffect(() => {
-    if (!socket || !roomId) return;
+    if (!socket || !roomId) return undefined;
 
     const normalizedRoomId = roomId.toUpperCase();
     socket.emit('screenJoinRoom', { roomId: normalizedRoomId });
@@ -50,49 +49,36 @@ export default function PresenterScreen() {
       setHideSongInfo(!!state.hideSongInfo);
       setPresenterDisconnected(false);
       setError(null);
-
-      setPendingSong(state.pendingSong || null);
-      if (state.pendingSongRevealAt) {
-        const secondsLeft = Math.max(1, Math.ceil((state.pendingSongRevealAt - Date.now()) / 1000));
-        setCountdownValue(secondsLeft);
-      } else {
-        setCountdownValue(null);
-      }
     });
 
     socket.on('screenJoinFailed', ({ message }) => {
-      setError(message || 'No se pudo conectar a la pantalla pública.');
-    });
-
-    socket.on('songCountdownStarted', ({ song, revealAt }) => {
-      setPendingSong(song);
-      const secondsLeft = Math.max(1, Math.ceil((revealAt - Date.now()) / 1000));
-      setCountdownValue(secondsLeft);
+      setError(message || 'No se pudo conectar a la pantalla publica.');
     });
 
     socket.on('newSongPlayed', ({ song }) => {
       setCurrentSong(song);
       setPlayedSongs((prev) => [...prev, song]);
       setGameState('PLAYING');
-      setPendingSong(null);
-      setCountdownValue(null);
     });
 
     socket.on('playersProgress', ({ players }) => setPlayersProgress(players));
-    socket.on('lineWinner', ({ player }) => setLineWinnerName(player.name));
+    socket.on('lineWinner', ({ player }) => {
+      setLineWinnerName(player.name);
+      setCelebration({ type: 'line', name: player.name });
+    });
     socket.on('bingoWinner', ({ player }) => {
       setWinner(player);
       setGameState('FINISHED');
+      setCelebration({ type: 'bingo', name: player.name });
     });
     socket.on('hideSongInfoChanged', ({ hideSongInfo: hide }) => setHideSongInfo(!!hide));
     socket.on('presenterDisconnected', () => setPresenterDisconnected(true));
     socket.on('presenterReconnected', () => setPresenterDisconnected(false));
-    socket.on('roomDestroyed', () => setError('La sala ya no está disponible.'));
+    socket.on('roomDestroyed', () => setError('La sala ya no esta disponible.'));
 
     return () => {
       socket.off('screenRoomState');
       socket.off('screenJoinFailed');
-      socket.off('songCountdownStarted');
       socket.off('newSongPlayed');
       socket.off('playersProgress');
       socket.off('lineWinner');
@@ -105,17 +91,10 @@ export default function PresenterScreen() {
   }, [roomId, socket]);
 
   useEffect(() => {
-    if (!pendingSong || countdownValue === null) return undefined;
-
-    const timer = window.setTimeout(() => {
-      setCountdownValue((prev) => {
-        if (prev === null) return null;
-        return prev <= 1 ? 0 : prev - 1;
-      });
-    }, countdownValue <= 1 ? 350 : 1000);
-
+    if (!celebration) return undefined;
+    const timer = window.setTimeout(() => setCelebration(null), celebration.type === 'bingo' ? 4800 : 2600);
     return () => window.clearTimeout(timer);
-  }, [countdownValue, pendingSong]);
+  }, [celebration]);
 
   const sortedPlayers = useMemo(
     () => [...playersProgress].sort((a, b) => (b.markedCount || 0) - (a.markedCount || 0)).slice(0, 6),
@@ -134,11 +113,17 @@ export default function PresenterScreen() {
   return (
     <div className="screen-shell">
       <div className="screen-backdrop" />
-      {countdownValue !== null && (
-        <div className="screen-countdown">
-          <div className="screen-countdown__ring">
-            <div className="screen-countdown__label">Siguiente canción en</div>
-            <div className="screen-countdown__value">{countdownValue}</div>
+      {celebration && (
+        <div className={`screen-celebration screen-celebration--${celebration.type}`}>
+          <div className="screen-celebration__confetti" />
+          <div className="screen-celebration__card">
+            <div className="screen-celebration__eyebrow">
+              {celebration.type === 'bingo' ? 'Bingo cantado' : 'Linea cantada'}
+            </div>
+            <div className="screen-celebration__title">
+              {celebration.type === 'bingo' ? 'BINGO' : 'LINEA'}
+            </div>
+            <div className="screen-celebration__name">{celebration.name}</div>
           </div>
         </div>
       )}
@@ -146,7 +131,7 @@ export default function PresenterScreen() {
         <section className="screen-main glass-panel">
           <div className="screen-topbar">
             <div>
-              <div className="screen-label">Pantalla pública</div>
+              <div className="screen-label">Pantalla publica</div>
               <h1 className="screen-room">Sala {roomId?.toUpperCase()}</h1>
             </div>
             <div className="screen-pill">{hideSongInfo ? 'Modo ciego' : 'Modo visible'}</div>
@@ -154,13 +139,13 @@ export default function PresenterScreen() {
 
           <div className="screen-status-stack">
             {presenterDisconnected && (
-              <StatusBanner tone="warn">El presentador se está reconectando. La partida sigue protegida.</StatusBanner>
+              <StatusBanner tone="warn">El presentador se esta reconectando. La partida sigue protegida.</StatusBanner>
             )}
             {error && <StatusBanner tone="danger">{error}</StatusBanner>}
           </div>
 
           {lineWinnerName && gameState !== 'FINISHED' && (
-            <div className="screen-highlight">LÍNEA: {lineWinnerName}</div>
+            <div className="screen-highlight">LINEA: {lineWinnerName}</div>
           )}
           {winner && (
             <div className="screen-highlight screen-highlight--winner">BINGO: {winner.name}</div>
@@ -186,7 +171,7 @@ export default function PresenterScreen() {
               {currentSong ? (
                 hideSongInfo ? (
                   <>
-                    <div className="screen-kicker">Adivina la canción</div>
+                    <div className="screen-kicker">Adivina la cancion</div>
                     <h2 className="screen-song-title">Sonando ahora mismo</h2>
                     <p className="screen-song-subtitle">Tema {playedSongs.length} de {playlist?.tracks?.length || playlist?.length || '?'}</p>
                   </>
@@ -200,7 +185,7 @@ export default function PresenterScreen() {
               ) : (
                 <>
                   <div className="screen-kicker">Preparando la partida</div>
-                  <h2 className="screen-song-title">Esperando la primera canción</h2>
+                  <h2 className="screen-song-title">Esperando la primera cancion</h2>
                   <p className="screen-song-subtitle">Todo listo para empezar el bingo musical.</p>
                 </>
               )}
@@ -210,10 +195,10 @@ export default function PresenterScreen() {
           <div className="screen-history">
             <div className="screen-section-title">Historial</div>
             <div className="screen-history-list">
-              {playedSongs.length === 0 && <div className="screen-history-item">Aún no ha salido ninguna canción.</div>}
+              {playedSongs.length === 0 && <div className="screen-history-item">Aun no ha salido ninguna cancion.</div>}
               {playedSongs.slice().reverse().slice(0, 8).map((song, index) => (
                 <div key={`${song.id}-${index}`} className="screen-history-item">
-                  {hideSongInfo ? `Canción #${playedSongs.length - index}` : `${song.name} · ${song.artist}`}
+                  {hideSongInfo ? `Cancion #${playedSongs.length - index}` : `${song.name} · ${song.artist}`}
                 </div>
               ))}
             </div>
@@ -237,7 +222,7 @@ export default function PresenterScreen() {
           <div className="screen-ranking">
             <div className="screen-section-title">Ranking en vivo</div>
             <div className="screen-ranking-list">
-              {sortedPlayers.length === 0 && <div className="screen-history-item">Sin progreso todavía.</div>}
+              {sortedPlayers.length === 0 && <div className="screen-history-item">Sin progreso todavia.</div>}
               {sortedPlayers.map((player) => {
                 const percentage = Math.round(((player.markedCount || 0) / (player.cardSize || 16)) * 100);
                 return (

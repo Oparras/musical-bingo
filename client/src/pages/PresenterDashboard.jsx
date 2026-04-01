@@ -116,8 +116,6 @@ export default function PresenterDashboard() {
   const [lineWinnerName, setLineWinnerName] = useState(null);
   const [spotifyWarning, setSpotifyWarning] = useState(null);
   const [presenterDisconnectedUntil, setPresenterDisconnectedUntil] = useState(null);
-  const [countdownValue, setCountdownValue] = useState(null);
-  const [pendingSong, setPendingSong] = useState(null);
   const connectedWaitingPlayers = useMemo(
     () => players.filter((player) => player?.isConnected !== false),
     [players]
@@ -158,8 +156,6 @@ export default function PresenterDashboard() {
     setPlayersProgress([]);
     setPublicBlindMode(false);
     setPresenterDisconnectedUntil(null);
-    setCountdownValue(null);
-    setPendingSong(null);
     setGameState('SETUP');
     setError(null);
   }, []);
@@ -194,14 +190,6 @@ export default function PresenterDashboard() {
     setPlayersProgress(state.playersProgress || []);
     setPublicBlindMode(!!state.hideSongInfo);
     setGameState(state.gameState || 'WAITING');
-    setPendingSong(state.pendingSong || null);
-
-    if (state.pendingSongRevealAt) {
-      const secondsLeft = Math.max(1, Math.ceil((state.pendingSongRevealAt - Date.now()) / 1000));
-      setCountdownValue(secondsLeft);
-    } else {
-      setCountdownValue(null);
-    }
 
     if (state.roomId) {
       window.localStorage.setItem(PRESENTER_ROOM_KEY, state.roomId);
@@ -440,8 +428,6 @@ export default function PresenterDashboard() {
       setRoomId(roomId);
       setGameState('WAITING');
       setPresenterDisconnectedUntil(null);
-      setPendingSong(null);
-      setCountdownValue(null);
       window.localStorage.setItem(PRESENTER_ROOM_KEY, roomId);
     });
     socket.on('playerJoined', ({ players }) => setPlayers(players));
@@ -475,16 +461,9 @@ export default function PresenterDashboard() {
     socket.on('hideSongInfoChanged', ({ hideSongInfo: hide }) => {
       setPublicBlindMode(!!hide);
     });
-    socket.on('songCountdownStarted', ({ song, revealAt }) => {
-      setPendingSong(song);
-      const secondsLeft = Math.max(1, Math.ceil((revealAt - Date.now()) / 1000));
-      setCountdownValue(secondsLeft);
-    });
     socket.on('newSongPlayed', async ({ song }) => {
       setCurrentSong(song);
       setPlayedSongs((prev) => [...prev, song]);
-      setPendingSong(null);
-      setCountdownValue(null);
 
       if (song?.uri && spotifyToken) {
         try {
@@ -524,26 +503,10 @@ export default function PresenterDashboard() {
       socket.off('presenterRoomState'); socket.off('presenterReconnectFailed');
       socket.off('presenterDisconnected'); socket.off('presenterReconnected');
       socket.off('hideSongInfoChanged');
-      socket.off('songCountdownStarted');
       socket.off('newSongPlayed');
       socket.off('roomDestroyed');
     };
   }, [deviceId, hydratePresenterState, resetPresenterState, socket, spotifyToken]);
-
-  useEffect(() => {
-    if (!pendingSong || countdownValue === null) return undefined;
-
-    if (countdownValue <= 1) {
-      const timer = window.setTimeout(() => setCountdownValue(0), 350);
-      return () => window.clearTimeout(timer);
-    }
-
-    const timer = window.setTimeout(() => {
-      setCountdownValue((prev) => (prev === null ? null : prev - 1));
-    }, 1000);
-
-    return () => window.clearTimeout(timer);
-  }, [countdownValue, pendingSong]);
 
   useEffect(() => {
     if (!roomId && gameState !== 'SETUP') {
@@ -565,8 +528,6 @@ export default function PresenterDashboard() {
       setPlaylist(data);
       setPlayedSongs([]);
       setCurrentSong(null);
-      setPendingSong(null);
-      setCountdownValue(null);
       setWinner(null);
       setLineWinnerName(null);
       socket.emit('createRoom', {
@@ -600,12 +561,12 @@ export default function PresenterDashboard() {
   };
 
   const playNextSong = async () => {
-    if (!playlist || countdownValue !== null) return;
+    if (!playlist) return;
     const remaining = playlist.tracks.filter(t => !playedSongs.find(ps => ps.id === t.id));
     if (remaining.length === 0) return alert('No more songs in playlist!');
 
     const randomTrack = remaining[Math.floor(Math.random() * remaining.length)];
-    socket.emit('playNextSong', { roomId, song: randomTrack, countdownMs: 1800 });
+    socket.emit('playNextSong', { roomId, song: randomTrack });
   };
 
   // --- PRIVATE ACCESS GATE ---
@@ -863,13 +824,6 @@ export default function PresenterDashboard() {
           </div>
           
           <div style={{ flex: isMobile ? 'none' : 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--glass-bg)', borderRadius: '15px', padding: '1.5rem', margin: '0.5rem 0', overflowY: 'auto' }}>
-            {countdownValue !== null && pendingSong && (
-              <div className="presenter-countdown-banner">
-                <div className="presenter-countdown-banner__kicker">Siguiente cancion preparada</div>
-                <div className="presenter-countdown-banner__title">{pendingSong.name}</div>
-                <div className="presenter-countdown-banner__value">{Math.max(countdownValue, 1)}</div>
-              </div>
-            )}
             {currentSong ? (
               <>
                 <div style={{ width: isMobile ? '140px' : '200px', height: isMobile ? '140px' : '200px', marginBottom: '1rem', borderRadius: '15px', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', flexShrink: 0, position: 'relative' }}>
@@ -903,7 +857,7 @@ export default function PresenterDashboard() {
           </div>
 
           <div style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
-             <button onClick={playNextSong} disabled={countdownValue !== null} style={{ flex: 1, padding: isMobile ? '15px' : '25px', fontSize: isMobile ? '1.1rem' : '1.7rem' }}>
+             <button onClick={playNextSong} style={{ flex: 1, padding: isMobile ? '15px' : '25px', fontSize: isMobile ? '1.1rem' : '1.7rem' }}>
               {currentSong ? '⏭ Siguiente Canción' : '▶ Empezar Juego'}
              </button>
              

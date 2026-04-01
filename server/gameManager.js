@@ -7,7 +7,6 @@ class GameManager {
     this.persistenceEnabled = !!(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY);
     this.presenterReconnectGraceMs = 3 * 60 * 1000;
     this.roomExpiredHandler = null;
-    this.songRevealHandler = null;
   }
 
   setRoomExpiredHandler(handler) {
@@ -94,8 +93,6 @@ class GameManager {
       playlist: room.playlist || null,
       playedSongs: Array.isArray(room.playedSongsDetailed) ? room.playedSongsDetailed : [],
       currentSong: room.currentSong || null,
-      pendingSong: room.pendingSong || null,
-      pendingSongRevealAt: room.pendingSongRevealAt || null,
       winner: room.players.find((player) => player.hasBingo) || null,
       lineWinnerName: room.players.find((player) => player.hasLine)?.name || null,
       playersProgress: this.getPlayersProgress(room),
@@ -142,9 +139,6 @@ class GameManager {
       playedSongs: [],
       playedSongsDetailed: [],
       currentSong: null,
-      pendingSong: null,
-      pendingSongRevealAt: null,
-      pendingSongTimeout: null,
     };
     
     this.rooms.set(finalRoomId, roomData);
@@ -206,9 +200,6 @@ class GameManager {
             playedSongs: dbRoom.played_songs_ids || [],
             playedSongsDetailed: [],
             currentSong: dbRoom.current_song,
-            pendingSong: null,
-            pendingSongRevealAt: null,
-            pendingSongTimeout: null,
             lineLocked: dbRoom.line_locked,
             hideSongInfo: false,
             players: (dbPlayers || []).map(p => ({
@@ -444,10 +435,6 @@ class GameManager {
     if (room.destroyTimeout) {
       clearTimeout(room.destroyTimeout);
     }
-    if (room.pendingSongTimeout) {
-      clearTimeout(room.pendingSongTimeout);
-    }
-
     this.rooms.delete(roomId);
 
     if (this.persistenceEnabled) {
@@ -476,12 +463,6 @@ class GameManager {
     room.playedSongs = [];
     room.playedSongsDetailed = [];
     room.currentSong = null;
-    room.pendingSong = null;
-    room.pendingSongRevealAt = null;
-    if (room.pendingSongTimeout) {
-      clearTimeout(room.pendingSongTimeout);
-      room.pendingSongTimeout = null;
-    }
     room.hideSongInfo = false;
     
     // Generate unique cards for all players
@@ -539,41 +520,6 @@ class GameManager {
         console.error('Supabase Error (nextSong):', err);
       }
     }
-  }
-
-  async scheduleNextSong(roomId, song, countdownMs) {
-    const room = this.rooms.get(roomId);
-    if (!room) return { error: 'Room not found' };
-    if (room.pendingSongTimeout) {
-      return { error: 'Song countdown already in progress' };
-    }
-
-    room.pendingSong = song;
-    room.pendingSongRevealAt = Date.now() + countdownMs;
-    room.pendingSongTimeout = setTimeout(async () => {
-      try {
-        await this.nextSong(roomId, song);
-        if (typeof this.songRevealHandler === 'function') {
-          this.songRevealHandler(roomId, song);
-        }
-      } finally {
-        const currentRoom = this.rooms.get(roomId);
-        if (currentRoom) {
-          currentRoom.pendingSong = null;
-          currentRoom.pendingSongRevealAt = null;
-          currentRoom.pendingSongTimeout = null;
-        }
-      }
-    }, countdownMs);
-
-    return {
-      room,
-      revealAt: room.pendingSongRevealAt,
-    };
-  }
-
-  setSongRevealHandler(handler) {
-    this.songRevealHandler = handler;
   }
 
   async setHideSongInfo(roomId, hideSongInfo) {
