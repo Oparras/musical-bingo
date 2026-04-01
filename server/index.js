@@ -100,6 +100,12 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('presenterReconnected');
   });
 
+  socket.on('closeRoom', async ({ roomId, presenterSessionId }) => {
+    const result = await gameManager.closeRoom(roomId, presenterSessionId);
+    if (result?.error) return socket.emit('error', result.error);
+    io.to(roomId).emit('roomDestroyed');
+  });
+
   socket.on('screenJoinRoom', async ({ roomId }) => {
     const room = await gameManager.getRoom(roomId);
     if (!room) {

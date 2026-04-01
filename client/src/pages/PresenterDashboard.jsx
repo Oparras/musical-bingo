@@ -146,8 +146,43 @@ export default function PresenterDashboard() {
     setSpotifyExpiresAt(null);
   }, []);
 
+  const resetPresenterState = useCallback(() => {
+    window.localStorage.removeItem(PRESENTER_ROOM_KEY);
+    setRoomId('');
+    setPlayers([]);
+    setPlaylist(null);
+    setPlayedSongs([]);
+    setCurrentSong(null);
+    setWinner(null);
+    setLineWinnerName(null);
+    setPlayersProgress([]);
+    setPublicBlindMode(false);
+    setPresenterDisconnectedUntil(null);
+    setCountdownValue(null);
+    setPendingSong(null);
+    setGameState('SETUP');
+    setError(null);
+  }, []);
+
+  const abandonPresenterRoom = useCallback(() => {
+    if (socket && roomId) {
+      socket.emit('closeRoom', {
+        roomId,
+        presenterSessionId: presenterSessionIdRef.current,
+      });
+    }
+
+    resetPresenterState();
+    navigate('/');
+  }, [navigate, resetPresenterState, roomId, socket]);
+
   const hydratePresenterState = useCallback((state) => {
     if (!state) return;
+
+    if (!state.roomId) {
+      resetPresenterState();
+      return;
+    }
 
     setRoomId(state.roomId || '');
     setPlayers(state.players || []);
@@ -171,7 +206,7 @@ export default function PresenterDashboard() {
     if (state.roomId) {
       window.localStorage.setItem(PRESENTER_ROOM_KEY, state.roomId);
     }
-  }, []);
+  }, [resetPresenterState]);
 
   const refreshSpotifyToken = useCallback(async () => {
     const refreshToken = window.localStorage.getItem(SPOTIFY_REFRESH_TOKEN_KEY);
@@ -428,7 +463,7 @@ export default function PresenterDashboard() {
       setError(null);
     });
     socket.on('presenterReconnectFailed', ({ message }) => {
-      window.localStorage.removeItem(PRESENTER_ROOM_KEY);
+      resetPresenterState();
       setError(message || 'No se pudo recuperar la sala del presentador.');
     });
     socket.on('presenterDisconnected', ({ reconnectDeadline }) => {
@@ -471,19 +506,7 @@ export default function PresenterDashboard() {
       }
     });
     socket.on('roomDestroyed', () => {
-      window.localStorage.removeItem(PRESENTER_ROOM_KEY);
-      setRoomId('');
-      setPlayers([]);
-      setPlaylist(null);
-      setPlayedSongs([]);
-      setCurrentSong(null);
-      setPlayersProgress([]);
-      setLineWinnerName(null);
-      setWinner(null);
-      setPresenterDisconnectedUntil(null);
-      setPendingSong(null);
-      setCountdownValue(null);
-      setGameState('SETUP');
+      resetPresenterState();
       setError('La sala del presentador expiró por desconexión prolongada.');
     });
     socket.on('lineWinner', ({ player }) => {
@@ -505,7 +528,7 @@ export default function PresenterDashboard() {
       socket.off('newSongPlayed');
       socket.off('roomDestroyed');
     };
-  }, [deviceId, hydratePresenterState, socket, spotifyToken]);
+  }, [deviceId, hydratePresenterState, resetPresenterState, socket, spotifyToken]);
 
   useEffect(() => {
     if (!pendingSong || countdownValue === null) return undefined;
@@ -521,6 +544,12 @@ export default function PresenterDashboard() {
 
     return () => window.clearTimeout(timer);
   }, [countdownValue, pendingSong]);
+
+  useEffect(() => {
+    if (!roomId && gameState !== 'SETUP') {
+      resetPresenterState();
+    }
+  }, [gameState, resetPresenterState, roomId]);
 
   const handleCreateRoom = async () => {
     const pid = selectedPresetId || extractPlaylistId(playlistUrl);
@@ -606,7 +635,7 @@ export default function PresenterDashboard() {
             style={{ textAlign: 'center', fontSize: '1.5rem', letterSpacing: '5px', marginBottom: '1.5rem' }}
           />
           <button type="submit" style={{ width: '100%' }}>Verificar Identidad</button>
-          <button className="secondary" onClick={() => navigate('/')} style={{ width: '100%', marginTop: '10px' }}>Volver</button>
+          <button className="secondary" onClick={abandonPresenterRoom} style={{ width: '100%', marginTop: '10px' }}>Volver</button>
         </form>
       </div>
     );
@@ -624,7 +653,7 @@ export default function PresenterDashboard() {
           <button onClick={handleSpotifyLogin} style={{ background: '#1DB954' }}>
             Iniciar sesión con Spotify Premium
           </button>
-          <button className="secondary" onClick={() => navigate('/')} style={{ marginTop: '10px', opacity: 0.7 }}>
+          <button className="secondary" onClick={abandonPresenterRoom} style={{ marginTop: '10px', opacity: 0.7 }}>
             🔙 Volver al Inicio
           </button>
         </div>
@@ -637,7 +666,7 @@ export default function PresenterDashboard() {
       <div className="glass-panel" style={{ maxWidth: '600px', margin: '10vh auto', position: 'relative' }}>
         <button 
           className="secondary" 
-          onClick={() => navigate('/')} 
+          onClick={abandonPresenterRoom} 
           style={{ position: 'absolute', top: '15px', right: '15px', padding: '5px 15px', fontSize: '0.8rem' }}
         >
           Salir
@@ -730,7 +759,7 @@ export default function PresenterDashboard() {
       <div className="glass-panel" style={{ maxWidth: '800px', margin: '5vh auto', textAlign: 'center', position: 'relative' }}>
         <button 
           className="secondary" 
-          onClick={() => navigate('/')} 
+          onClick={abandonPresenterRoom} 
           style={{ position: 'absolute', top: '20px', right: '20px', padding: '8px 20px' }}
         >
           Abandonar Partida
@@ -811,7 +840,7 @@ export default function PresenterDashboard() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '10px' }}>
             <button 
               className="secondary" 
-              onClick={() => { if(confirm('¿Seguro que quieres salir? Se cerrará la partida.')) navigate('/') }}
+              onClick={() => { if(confirm('¿Seguro que quieres salir? Se cerrará la partida.')) abandonPresenterRoom(); }}
               style={{ padding: '8px 15px', fontSize: '0.8rem', borderRadius: '10px' }}
             >
               🚪 Salir
@@ -1027,7 +1056,7 @@ export default function PresenterDashboard() {
         </p>
         <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
           <button onClick={() => window.location.reload()}>Jugar otra vez</button>
-          <button className="secondary" onClick={() => navigate('/')}>Ir al Inicio</button>
+          <button className="secondary" onClick={abandonPresenterRoom}>Ir al Inicio</button>
         </div>
       </div>
     );

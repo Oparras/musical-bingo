@@ -434,6 +434,34 @@ class GameManager {
     return null;
   }
 
+  async closeRoom(roomId, presenterSessionId) {
+    const room = await this.getRoom(roomId);
+    if (!room) return { error: 'Room not found' };
+    if (room.presenterSessionId && presenterSessionId && room.presenterSessionId !== presenterSessionId) {
+      return { error: 'Presenter session not valid' };
+    }
+
+    if (room.destroyTimeout) {
+      clearTimeout(room.destroyTimeout);
+    }
+    if (room.pendingSongTimeout) {
+      clearTimeout(room.pendingSongTimeout);
+    }
+
+    this.rooms.delete(roomId);
+
+    if (this.persistenceEnabled) {
+      try {
+        await supabase.from('players').delete().eq('room_id', roomId);
+        await supabase.from('rooms').delete().eq('id', roomId);
+      } catch (err) {
+        console.error('Supabase Error (closeRoom):', err);
+      }
+    }
+
+    return { roomId };
+  }
+
   async startGame(roomId, playlist) {
     const room = this.rooms.get(roomId);
     if (!room) return { error: 'Room not found' };
