@@ -89,18 +89,30 @@ class GameManager {
   async joinRoom(roomId, player) {
     const room = this.rooms.get(roomId);
     if (!room) return { error: 'Room not found' };
-    if (room.status !== 'WAITING') {
-      // Check if player is reconnecting
-      const existing = room.players.find(p => p.id === player.id);
-      if (existing) {
-        existing.socketId = player.socketId;
-        existing.isConnected = true;
-        return { room, player: existing, reconnect: true };
+
+    // 1. Check if player already exists in this room (reconnection)
+    let existingPlayer = room.players.find(p => p.id === player.id);
+    
+    if (existingPlayer) {
+      existingPlayer.socketId = player.socketId;
+      existingPlayer.isConnected = true;
+      
+      if (this.persistenceEnabled) {
+        await supabase
+          .from('players')
+          .update({ is_connected: true, socket_id: player.socketId, last_seen: new Date().toISOString() })
+          .eq('id', player.id);
       }
+      return { room, player: existingPlayer, reconnect: true };
+    }
+
+    // 2. If it's a NEW player join, check room status
+    if (room.status !== 'WAITING') {
       return { error: 'Game already in progress' };
     }
 
-    if (room.players.find(p => p.name.toLowerCase() === player.name.toLowerCase() && p.id !== player.id)) {
+    // Check if name is taken by another UNKNOWN player
+    if (room.players.find(p => p.name.toLowerCase() === player.name.toLowerCase())) {
       return { error: 'Name already taken in this room' };
     }
 
