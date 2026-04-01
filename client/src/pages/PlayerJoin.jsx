@@ -20,7 +20,6 @@ export default function PlayerJoin() {
     
     if (savedRoomId && savedPlayerId && savedPlayerName) {
       setHasSavedSession(true);
-      setRoomId(savedRoomId);
       setPlayerName(savedPlayerName);
     }
   }, []);
@@ -95,9 +94,9 @@ export default function PlayerJoin() {
           />
         </div>
 
-        {hasSavedSession && (
+        {hasSavedSession && roomId.toUpperCase() === localStorage.getItem('bingo_roomId')?.toUpperCase() && (
           <div style={{ marginBottom: '1.5rem', padding: '15px', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '12px', border: '1px dashed var(--accent-color)' }}>
-            <p style={{ margin: '0 0 10px 0', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Hemos encontrado una partida anterior:</p>
+            <p style={{ margin: '0 0 10px 0', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Hemos encontrado una partida anterior en esta sala:</p>
             <button 
               type="button" 
               className="accent"
