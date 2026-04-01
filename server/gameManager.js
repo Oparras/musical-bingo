@@ -110,8 +110,8 @@ class GameManager {
       return { room, player: existingPlayer, reconnect: true };
     }
 
-    // 2. If it's a NEW player join (no playerId provided), check room status
-    if (room.status !== 'WAITING' && !player.id) {
+    // 2. If it's a NEW player join (no playerId provided in the original request), check room status
+    if (room.status !== 'WAITING' && !player.isReconnecting) {
       return { error: 'Game already in progress' };
     }
 
