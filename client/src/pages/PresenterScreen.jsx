@@ -50,15 +50,32 @@ export default function PresenterScreen() {
       setHideSongInfo(!!state.hideSongInfo);
       setPresenterDisconnected(false);
       setError(null);
+
+      setPendingSong(state.pendingSong || null);
+      if (state.pendingSongRevealAt) {
+        const secondsLeft = Math.max(1, Math.ceil((state.pendingSongRevealAt - Date.now()) / 1000));
+        setCountdownValue(secondsLeft);
+      } else {
+        setCountdownValue(null);
+      }
     });
 
     socket.on('screenJoinFailed', ({ message }) => {
       setError(message || 'No se pudo conectar a la pantalla pública.');
     });
 
-    socket.on('newSongPlayed', ({ song }) => {
+    socket.on('songCountdownStarted', ({ song, revealAt }) => {
       setPendingSong(song);
-      setCountdownValue(3);
+      const secondsLeft = Math.max(1, Math.ceil((revealAt - Date.now()) / 1000));
+      setCountdownValue(secondsLeft);
+    });
+
+    socket.on('newSongPlayed', ({ song }) => {
+      setCurrentSong(song);
+      setPlayedSongs((prev) => [...prev, song]);
+      setGameState('PLAYING');
+      setPendingSong(null);
+      setCountdownValue(null);
     });
 
     socket.on('playersProgress', ({ players }) => setPlayersProgress(players));
@@ -75,6 +92,7 @@ export default function PresenterScreen() {
     return () => {
       socket.off('screenRoomState');
       socket.off('screenJoinFailed');
+      socket.off('songCountdownStarted');
       socket.off('newSongPlayed');
       socket.off('playersProgress');
       socket.off('lineWinner');
@@ -89,18 +107,12 @@ export default function PresenterScreen() {
   useEffect(() => {
     if (!pendingSong || countdownValue === null) return undefined;
 
-    if (countdownValue === 0) {
-      setCurrentSong(pendingSong);
-      setPlayedSongs((prev) => [...prev, pendingSong]);
-      setGameState('PLAYING');
-      setPendingSong(null);
-      setCountdownValue(null);
-      return undefined;
-    }
-
     const timer = window.setTimeout(() => {
-      setCountdownValue((prev) => (prev === null ? null : prev - 1));
-    }, 900);
+      setCountdownValue((prev) => {
+        if (prev === null) return null;
+        return prev <= 1 ? 0 : prev - 1;
+      });
+    }, countdownValue <= 1 ? 350 : 1000);
 
     return () => window.clearTimeout(timer);
   }, [countdownValue, pendingSong]);

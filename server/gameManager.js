@@ -7,10 +7,52 @@ class GameManager {
     this.persistenceEnabled = !!(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY);
     this.presenterReconnectGraceMs = 3 * 60 * 1000;
     this.roomExpiredHandler = null;
+    this.songRevealHandler = null;
   }
 
   setRoomExpiredHandler(handler) {
     this.roomExpiredHandler = handler;
+  }
+
+  async roomExists(roomId) {
+    if (this.rooms.has(roomId)) return true;
+    if (!this.persistenceEnabled) return false;
+
+    try {
+      const { data, error } = await supabase
+        .from('rooms')
+        .select('id')
+        .eq('id', roomId)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Supabase Error (roomExists):', error);
+        return false;
+      }
+
+      return !!data;
+    } catch (err) {
+      console.error('Supabase Error (roomExists):', err);
+      return false;
+    }
+  }
+
+  async generateRoomId(length = 4) {
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+    for (let attempt = 0; attempt < 25; attempt += 1) {
+      let roomId = '';
+      for (let i = 0; i < length; i += 1) {
+        roomId += alphabet[Math.floor(Math.random() * alphabet.length)];
+      }
+
+      const exists = await this.roomExists(roomId);
+      if (!exists) {
+        return roomId;
+      }
+    }
+
+    throw new Error('Failed to generate a unique room ID');
   }
 
   getValidMarkedCount(room, player) {
@@ -52,6 +94,8 @@ class GameManager {
       playlist: room.playlist || null,
       playedSongs: Array.isArray(room.playedSongsDetailed) ? room.playedSongsDetailed : [],
       currentSong: room.currentSong || null,
+      pendingSong: room.pendingSong || null,
+      pendingSongRevealAt: room.pendingSongRevealAt || null,
       winner: room.players.find((player) => player.hasBingo) || null,
       lineWinnerName: room.players.find((player) => player.hasLine)?.name || null,
       playersProgress: this.getPlayersProgress(room),
@@ -84,8 +128,9 @@ class GameManager {
   }
 
   async createRoom(roomId, presenterSocketId, presenterSessionId) {
+    const finalRoomId = roomId || await this.generateRoomId();
     const roomData = {
-      id: roomId,
+      id: finalRoomId,
       presenter: presenterSocketId,
       presenterSessionId,
       presenterConnected: true,
@@ -97,21 +142,24 @@ class GameManager {
       playedSongs: [],
       playedSongsDetailed: [],
       currentSong: null,
+      pendingSong: null,
+      pendingSongRevealAt: null,
+      pendingSongTimeout: null,
     };
     
-    this.rooms.set(roomId, roomData);
+    this.rooms.set(finalRoomId, roomData);
 
     if (this.persistenceEnabled) {
       try {
         await supabase
           .from('players')
           .delete()
-          .eq('room_id', roomId);
+          .eq('room_id', finalRoomId);
 
         const { error } = await supabase
           .from('rooms')
           .upsert({ 
-            id: roomId, 
+            id: finalRoomId, 
             status: 'WAITING', 
             host_id: presenterSocketId,
             line_locked: false,
@@ -158,6 +206,9 @@ class GameManager {
             playedSongs: dbRoom.played_songs_ids || [],
             playedSongsDetailed: [],
             currentSong: dbRoom.current_song,
+            pendingSong: null,
+            pendingSongRevealAt: null,
+            pendingSongTimeout: null,
             lineLocked: dbRoom.line_locked,
             hideSongInfo: false,
             players: (dbPlayers || []).map(p => ({
@@ -397,6 +448,12 @@ class GameManager {
     room.playedSongs = [];
     room.playedSongsDetailed = [];
     room.currentSong = null;
+    room.pendingSong = null;
+    room.pendingSongRevealAt = null;
+    if (room.pendingSongTimeout) {
+      clearTimeout(room.pendingSongTimeout);
+      room.pendingSongTimeout = null;
+    }
     room.hideSongInfo = false;
     
     // Generate unique cards for all players
@@ -454,6 +511,41 @@ class GameManager {
         console.error('Supabase Error (nextSong):', err);
       }
     }
+  }
+
+  async scheduleNextSong(roomId, song, countdownMs) {
+    const room = this.rooms.get(roomId);
+    if (!room) return { error: 'Room not found' };
+    if (room.pendingSongTimeout) {
+      return { error: 'Song countdown already in progress' };
+    }
+
+    room.pendingSong = song;
+    room.pendingSongRevealAt = Date.now() + countdownMs;
+    room.pendingSongTimeout = setTimeout(async () => {
+      try {
+        await this.nextSong(roomId, song);
+        if (typeof this.songRevealHandler === 'function') {
+          this.songRevealHandler(roomId, song);
+        }
+      } finally {
+        const currentRoom = this.rooms.get(roomId);
+        if (currentRoom) {
+          currentRoom.pendingSong = null;
+          currentRoom.pendingSongRevealAt = null;
+          currentRoom.pendingSongTimeout = null;
+        }
+      }
+    }, countdownMs);
+
+    return {
+      room,
+      revealAt: room.pendingSongRevealAt,
+    };
+  }
+
+  setSongRevealHandler(handler) {
+    this.songRevealHandler = handler;
   }
 
   async setHideSongInfo(roomId, hideSongInfo) {

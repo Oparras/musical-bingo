@@ -270,6 +270,39 @@ button:disabled {
   letter-spacing: 0.02em;
 }
 
+.presenter-countdown-banner {
+  width: 100%;
+  max-width: 420px;
+  margin-bottom: 1rem;
+  padding: 1rem 1.25rem;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: linear-gradient(135deg, rgba(37, 117, 252, 0.18), rgba(106, 17, 203, 0.26));
+  text-align: center;
+  animation: fadeInUp 0.25s ease;
+}
+
+.presenter-countdown-banner__kicker {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+
+.presenter-countdown-banner__title {
+  margin-top: 0.45rem;
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.presenter-countdown-banner__value {
+  margin-top: 0.75rem;
+  font-size: 2.8rem;
+  font-weight: 800;
+  line-height: 1;
+  color: #fff;
+}
+
 .screen-shell {
   position: relative;
   min-height: 100vh;

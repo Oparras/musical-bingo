@@ -71,14 +71,22 @@ gameManager.setRoomExpiredHandler((roomId) => {
   io.to(roomId).emit('roomDestroyed');
 });
 
+gameManager.setSongRevealHandler((roomId, song) => {
+  io.to(roomId).emit('newSongPlayed', { song });
+  const room = gameManager.rooms.get(roomId);
+  if (room) {
+    io.to(roomId).emit('screenRoomState', gameManager.getPresenterState(room));
+  }
+});
+
 io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`);
 
   // ---> Presenter Events <---
-  socket.on('createRoom', async ({ roomId, presenterSessionId }) => {
-    await gameManager.createRoom(roomId, socket.id, presenterSessionId);
-    socket.join(roomId);
-    socket.emit('roomCreated', { roomId });
+  socket.on('createRoom', async ({ presenterSessionId }) => {
+    const room = await gameManager.createRoom(null, socket.id, presenterSessionId);
+    socket.join(room.id);
+    socket.emit('roomCreated', { roomId: room.id });
   });
 
   socket.on('reconnectPresenter', async ({ roomId, presenterSessionId }) => {
@@ -116,9 +124,15 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('screenRoomState', gameManager.getPresenterState(room));
   });
 
-  socket.on('playNextSong', async ({ roomId, song }) => {
-    await gameManager.nextSong(roomId, song);
-    io.to(roomId).emit('newSongPlayed', { song });
+  socket.on('playNextSong', async ({ roomId, song, countdownMs = 1800 }) => {
+    const result = await gameManager.scheduleNextSong(roomId, song, countdownMs);
+    if (result?.error) return socket.emit('error', result.error);
+
+    io.to(roomId).emit('songCountdownStarted', {
+      song,
+      countdownMs,
+      revealAt: result.revealAt,
+    });
   });
 
   socket.on('setHideSongInfo', async ({ roomId, hideSongInfo }) => {
