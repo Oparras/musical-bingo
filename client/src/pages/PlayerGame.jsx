@@ -237,10 +237,11 @@ export default function PlayerGame() {
   useEffect(() => {
     if (!socket) return;
 
-    socket.on('gameStarted', ({ card, markedIndexes, currentSong, hasLine, hasBingo, roomLineClaimed }) => {
+    socket.on('gameStarted', ({ card, markedIndexes, currentSong, hasLine, hasBingo, roomLineClaimed, lineAttempts, bingoAttempts }) => {
       setCard(card);
       setGameState('PLAYING');
       setHasClaimedLine(hasLine || false);
+      setRoomLineClaimed(roomLineClaimed || false);
       setHasClaimedBingo(hasBingo || false);
       setLineAttempts(lineAttempts ?? 3);
       setBingoAttempts(bingoAttempts ?? 3);
