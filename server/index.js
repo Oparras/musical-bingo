@@ -15,6 +15,7 @@ app.get('/health', (req, res) => {
 });
 
 const spotifyApi = require('./spotifyApi');
+const presetPlaylists = require('./presetPlaylists');
 
 app.get('/api/spotify/login-url', (req, res) => {
   try {
@@ -33,6 +34,28 @@ app.get('/api/spotify/playlist/:id', async (req, res) => {
   } catch (error) {
     console.error('Spotify API Error:', error.message);
     res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/spotify/preset-playlists', async (req, res) => {
+  try {
+    const playlists = await Promise.all(
+      presetPlaylists.map(async (preset) => {
+        const playlistData = await spotifyApi.getPlaylist(preset.id);
+        return {
+          id: preset.id,
+          url: preset.url,
+          name: playlistData.name,
+          image: playlistData.images?.[0]?.url || null,
+          trackCount: playlistData.tracks.length
+        };
+      })
+    );
+
+    res.json({ playlists });
+  } catch (error) {
+    console.error('Preset playlists error:', error.message);
+    res.status(500).json({ error: 'Failed to fetch preset playlists' });
   }
 });
 

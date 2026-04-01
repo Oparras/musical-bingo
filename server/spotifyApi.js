@@ -4,6 +4,18 @@ class SpotifyApi {
     this.clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
     this.token = null;
     this.tokenExpiration = null;
+    this.playlistCache = new Map();
+  }
+
+  mapTrack(track) {
+    return {
+      id: track.id,
+      name: track.name,
+      artist: track.artists.map((artist) => artist.name).join(', '),
+      previewUrl: track.preview_url,
+      uri: track.uri,
+      imageUrl: track.album?.images?.[0]?.url || null
+    };
   }
 
   async getAccessToken() {
@@ -58,11 +70,44 @@ class SpotifyApi {
   // just for the player token if we only need it on the client. 
   // We'll let the client handle the token extraction from the hash.
 
+  async fetchPlaylistTracks(playlistId, token) {
+    const tracks = [];
+    let nextUrl = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100&fields=items(track(id,name,artists,preview_url,album(images),uri)),next`;
+
+    while (nextUrl) {
+      const response = await fetch(nextUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch playlist tracks: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const pageTracks = (data.items || [])
+        .map((item) => item.track)
+        .filter((track) => track && track.id)
+        .map((track) => this.mapTrack(track));
+
+      tracks.push(...pageTracks);
+      nextUrl = data.next;
+    }
+
+    return tracks;
+  }
+
   async getPlaylist(playlistId) {
+    const cachedEntry = this.playlistCache.get(playlistId);
+    if (cachedEntry && cachedEntry.expiresAt > Date.now()) {
+      return cachedEntry.data;
+    }
+
     const token = await this.getAccessToken();
     
-    // Fetch playlist details including nested track data
-    const url = `https://api.spotify.com/v1/playlists/${playlistId}?fields=name,description,images,tracks.items(track(id,name,artists,preview_url,album(images),uri))`;
+    // Fetch playlist metadata first, then paginate all tracks separately.
+    const url = `https://api.spotify.com/v1/playlists/${playlistId}?fields=name,description,images`;
     
     try {
       const response = await fetch(url, {
@@ -76,25 +121,20 @@ class SpotifyApi {
       }
 
       const data = await response.json();
-      
-      // Map the tracks to a clean object for the game
-      const tracks = data.tracks.items
-        .map(item => item.track)
-        .filter(track => track && track.id) // Ensure valid track
-        .map(track => ({
-          id: track.id,
-          name: track.name,
-          artist: track.artists.map(a => a.name).join(', '),
-          previewUrl: track.preview_url, // For Free users (30s)
-          uri: track.uri,               // For Premium users (Full playback SDK)
-          imageUrl: track.album?.images?.[0]?.url || null
-        }));
+      const tracks = await this.fetchPlaylistTracks(playlistId, token);
 
-      return {
+      const playlistData = {
         name: data.name,
         images: data.images,
         tracks: tracks
       };
+
+      this.playlistCache.set(playlistId, {
+        data: playlistData,
+        expiresAt: Date.now() + 10 * 60 * 1000
+      });
+
+      return playlistData;
     } catch (error) {
       console.error('Error fetching playlist:', error);
       throw new Error('Failed to fetch playlist from Spotify');

@@ -30,6 +30,45 @@ const base64encode = (input) => {
     .replace(/\//g, '_');
 }
 
+const getBackendUrl = () => {
+  const defaultBackendUrl = `http://${window.location.hostname}:3001`;
+  return import.meta.env.VITE_BACKEND_URL || defaultBackendUrl;
+};
+
+const extractPlaylistId = (value) => {
+  if (!value) return '';
+  const trimmedValue = value.trim();
+  const match = trimmedValue.match(/playlist\/([a-zA-Z0-9]+)/);
+  return match ? match[1] : trimmedValue;
+};
+
+const getTrackCountTone = (trackCount) => {
+  if (trackCount > 200) {
+    return {
+      label: 'Larga',
+      color: '#ef4444',
+      background: 'rgba(239, 68, 68, 0.16)',
+      border: 'rgba(239, 68, 68, 0.45)'
+    };
+  }
+
+  if (trackCount >= 100) {
+    return {
+      label: 'Media',
+      color: '#facc15',
+      background: 'rgba(250, 204, 21, 0.14)',
+      border: 'rgba(250, 204, 21, 0.4)'
+    };
+  }
+
+  return {
+    label: 'Compacta',
+    color: '#4ade80',
+    background: 'rgba(74, 222, 128, 0.14)',
+    border: 'rgba(74, 222, 128, 0.4)'
+  };
+};
+
 export default function PresenterDashboard() {
   const socket = useSocket();
   const navigate = useNavigate();
@@ -41,6 +80,9 @@ export default function PresenterDashboard() {
 
   const [roomId, setRoomId] = useState('');
   const [playlistUrl, setPlaylistUrl] = useState('');
+  const [selectedPresetId, setSelectedPresetId] = useState('');
+  const [presetPlaylists, setPresetPlaylists] = useState([]);
+  const [presetLoading, setPresetLoading] = useState(false);
   const [gameState, setGameState] = useState('SETUP'); 
   const [players, setPlayers] = useState([]);
   const [playlist, setPlaylist] = useState(null);
@@ -100,6 +142,27 @@ export default function PresenterDashboard() {
       setSpotifyToken(storedToken);
     }
   }, []);
+
+  useEffect(() => {
+    if (!spotifyToken) return;
+
+    const loadPresetPlaylists = async () => {
+      setPresetLoading(true);
+      try {
+        const res = await fetch(`${getBackendUrl()}/api/spotify/preset-playlists`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to load preset playlists');
+        setPresetPlaylists(data.playlists || []);
+      } catch (err) {
+        console.error('Preset playlists load error:', err);
+        setError((currentError) => currentError || 'No se pudieron cargar las playlists predefinidas.');
+      } finally {
+        setPresetLoading(false);
+      }
+    };
+
+    loadPresetPlaylists();
+  }, [spotifyToken]);
 
   const handleSpotifyLogin = async () => {
     const codeVerifier  = generateRandomString(64);
@@ -209,15 +272,12 @@ export default function PresenterDashboard() {
   }, [socket]);
 
   const handleCreateRoom = async () => {
-    if (!playlistUrl) return setError('Please enter a Spotify Playlist URL');
-    let pid = playlistUrl;
-    const match = playlistUrl.match(/playlist\/([a-zA-Z0-9]+)/);
-    if (match) pid = match[1];
+    const pid = selectedPresetId || extractPlaylistId(playlistUrl);
+    if (!pid) return setError('Please enter a Spotify Playlist URL or choose a preset playlist.');
 
     setLoading(true); setError(null);
     try {
-      const defaultBackendUrl = `http://${window.location.hostname}:3001`;
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || defaultBackendUrl;
+      const backendUrl = getBackendUrl();
       const res = await fetch(`${backendUrl}/api/spotify/playlist/${pid}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to fetch playlist');
@@ -357,14 +417,71 @@ export default function PresenterDashboard() {
         {error && <div style={{ color: '#ff4d4d', marginBottom: '1rem', padding: '10px', background: 'rgba(255,0,0,0.1)', borderRadius: '8px' }}>{error}</div>}
         
         <div style={{ marginBottom: '1rem' }}>
+          <label style={{ display: 'block', margin: '0 0 0.75rem 0', color: 'var(--text-muted)' }}>
+            Playlists predefinidas
+          </label>
+
+          {presetLoading ? (
+            <div style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>
+              Cargando playlists predefinidas...
+            </div>
+          ) : (
+            <div className="preset-playlist-grid">
+              {presetPlaylists.map((preset) => {
+                const tone = getTrackCountTone(preset.trackCount);
+                const isSelected = selectedPresetId === preset.id;
+
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className={`preset-playlist-card${isSelected ? ' selected' : ''}`}
+                    onClick={() => {
+                      setSelectedPresetId(preset.id);
+                      setPlaylistUrl(preset.url);
+                      setError(null);
+                    }}
+                  >
+                    <div className="preset-playlist-card__image">
+                      {preset.image ? (
+                        <img src={preset.image} alt={preset.name} />
+                      ) : (
+                        <div className="preset-playlist-card__fallback">Playlist</div>
+                      )}
+                    </div>
+                    <div className="preset-playlist-card__content">
+                      <div className="preset-playlist-card__title">{preset.name}</div>
+                      <div className="preset-playlist-card__meta">
+                        <span
+                          className="preset-playlist-card__badge"
+                          style={{
+                            color: tone.color,
+                            background: tone.background,
+                            borderColor: tone.border
+                          }}
+                        >
+                          {tone.label}
+                        </span>
+                        <span>{preset.trackCount} canciones</span>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           <label style={{ display: 'block', margin: '1.5rem 0 0.5rem 0', color: 'var(--text-muted)' }}>
-            Spotify Playlist URL
+            Spotify Playlist URL manual
           </label>
           <input 
             type="text" 
             placeholder="https://open.spotify.com/playlist/..." 
             value={playlistUrl}
-            onChange={(e) => setPlaylistUrl(e.target.value)}
+            onChange={(e) => {
+              setPlaylistUrl(e.target.value);
+              setSelectedPresetId('');
+            }}
           />
         </div>
         
