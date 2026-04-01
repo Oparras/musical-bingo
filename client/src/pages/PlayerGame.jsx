@@ -254,6 +254,14 @@ export default function PlayerGame() {
     };
 
     const onBingoWinner = ({ player }) => {
+      const localPlayerId = localStorage.getItem(LS_PLAYER);
+      const isMine = !!localPlayerId && localPlayerId === player.id;
+      if (isMine) {
+        setHasClaimedBingo(true);
+        showOverlay('HAS CANTADO BINGO!', '🎉');
+      } else {
+        showOverlay(`BINGO!\n${player.name}`, '🏆');
+      }
       setWinner(player);
       setGameState('GAME_OVER');
       // Limpiar localStorage al terminar la partida
@@ -512,7 +520,7 @@ export default function PlayerGame() {
           <button
             onClick={() => claimWin('BINGO')}
             disabled={hasClaimedBingo || bingoAttempts <= 0 || bingoSubmitting}
-            className={(!hasClaimedBingo && localBingo) ? 'claim-btn-pulse' : ''}
+            className={(!hasClaimedBingo && bingoAttempts > 0 && localBingo) ? 'claim-btn-pulse' : ''}
             style={{
               flex: 1.3, padding: '18px', fontSize: '1.2rem', fontWeight: '900',
               borderRadius: '20px', border: 'none', color: 'white',
