@@ -170,9 +170,9 @@ export default function PlayerGame() {
   useEffect(() => {
     if (!socket) return;
 
-    const onJoinSuccess = ({ lineAttempts, bingoAttempts }) => {
-      setLineAttempts(lineAttempts ?? 3);
-      setBingoAttempts(bingoAttempts ?? 3);
+    const onJoinSuccess = (data) => {
+      if (data.lineAttempts !== undefined) setLineAttempts(data.lineAttempts);
+      if (data.bingoAttempts !== undefined) setBingoAttempts(data.bingoAttempts);
     };
 
     const onGameStarted = ({ card, markedIndexes, hasLine, hasBingo, roomLineClaimed, lineAttempts, bingoAttempts }) => {
@@ -181,8 +181,8 @@ export default function PlayerGame() {
       setHasClaimedLine(hasLine || false);
       setHasClaimedBingo(hasBingo || false);
       setRoomLineClaimed(roomLineClaimed || false);
-      setLineAttempts(lineAttempts ?? 3);
-      setBingoAttempts(bingoAttempts ?? 3);
+      if (lineAttempts !== undefined) setLineAttempts(lineAttempts);
+      if (bingoAttempts !== undefined) setBingoAttempts(bingoAttempts);
       if (markedIndexes) setMarkedIndexes(new Set(markedIndexes));
     };
 
@@ -248,7 +248,7 @@ export default function PlayerGame() {
   }, [socket, navigate, addToast, showOverlay]);
 
   const toggleMark = (index) => {
-    if (gameState !== 'PLAYING') return;
+    if (gameState !== 'PLAYING' || lineSubmitting || bingoSubmitting) return;
     setMarkedIndexes(prev => {
       const next = new Set(prev);
       if (next.has(index)) next.delete(index);
@@ -284,51 +284,22 @@ export default function PlayerGame() {
 
   const { localLine, localBingo } = checkGeometry();
 
-  const claimLine = () => {
-    if (hasClaimedLine) {
-      addToast('✅ Ya has cantado línea.', 'info');
-      return;
+  const claimWin = (type) => {
+    if (type === 'LINE') {
+      if (hasClaimedLine || lineAttempts <= 0 || lineSubmitting) return;
+      if (!localLine) { addToast('❌ No tienes una línea todavía.', 'error'); return; }
+      setLineSubmitting(true);
+    } else {
+      if (hasClaimedBingo || bingoAttempts <= 0 || bingoSubmitting) return;
+      if (!localBingo) { addToast('❌ Te faltan canciones para el bingo.', 'error'); return; }
+      setBingoSubmitting(true);
     }
-    if (lineAttempts <= 0) {
-      addToast('🚫 No te quedan intentos de línea.', 'error');
-      return;
-    }
-    if (!localLine) {
-      addToast('❌ No tienes una línea completa todavía.', 'error');
-      return;
-    }
-    if (lineSubmitting) return;
 
-    setLineSubmitting(true);
     socket.emit('claimWin', {
       roomId: roomId.toUpperCase(),
       playerId: localStorage.getItem('bingo_playerId'),
       markedIndexes: Array.from(markedIndexes),
-      type: 'LINE',
-    });
-  };
-
-  const claimBingo = () => {
-    if (hasClaimedBingo) {
-      addToast('✅ Ya has cantado bingo.', 'info');
-      return;
-    }
-    if (bingoAttempts <= 0) {
-      addToast('🚫 No te quedan intentos de bingo.', 'error');
-      return;
-    }
-    if (!localBingo) {
-      addToast('❌ Te faltan canciones para el bingo.', 'error');
-      return;
-    }
-    if (bingoSubmitting) return;
-
-    setBingoSubmitting(true);
-    socket.emit('claimWin', {
-      roomId: roomId.toUpperCase(),
-      playerId: localStorage.getItem('bingo_playerId'),
-      markedIndexes: Array.from(markedIndexes),
-      type: 'BINGO',
+      type,
     });
   };
 
@@ -350,18 +321,27 @@ export default function PlayerGame() {
         <Toast toasts={toasts} />
         {overlay && <WinnerOverlay message={overlay.message} emoji={overlay.emoji} onClose={() => setOverlay(null)} />}
         
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-          <h3 style={{ margin: 0 }}>Sala: {roomId}</h3>
-          <div style={{ color: 'var(--accent-color)', fontWeight: 'bold' }}>{markedIndexes.size} / 16</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', alignItems: 'center' }}>
+          <h3 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--text-muted)' }}>SALA: {roomId}</h3>
+          <div style={{ color: 'var(--accent-color)', fontWeight: '900', fontSize: '1.1rem' }}>{markedIndexes.size} / 16 ✓</div>
         </div>
 
         {hasClaimedLine && (
-          <div style={{ background: 'var(--success-color)', borderRadius: '10px', padding: '8px', marginBottom: '10px', textAlign: 'center' }}>
+          <div style={{ 
+            background: 'linear-gradient(90deg, #00c851, #007E33)', 
+            borderRadius: '12px', 
+            padding: '10px', 
+            marginBottom: '15px', 
+            textAlign: 'center',
+            fontWeight: '800',
+            fontSize: '1rem',
+            boxShadow: '0 4px 15px rgba(0, 200, 81, 0.3)'
+          }}>
             ✅ ¡LÍNEA CANTADA! 🎉
           </div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '15px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'clamp(4px, 1.5vw, 12px)', marginBottom: '20px' }}>
           {card.map((song, i) => {
             const isMarked = markedIndexes.has(i);
             return (
@@ -370,39 +350,44 @@ export default function PlayerGame() {
                 onClick={() => toggleMark(i)}
                 style={{
                   aspectRatio: '1',
-                  background: isMarked ? 'linear-gradient(135deg, var(--primary-color), var(--secondary-color))' : 'var(--glass-bg)',
-                  borderRadius: '12px',
+                  background: isMarked 
+                    ? 'linear-gradient(135deg, var(--primary-color), var(--secondary-color))' 
+                    : 'var(--glass-bg)',
+                  borderRadius: '16px',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  padding: '5px',
+                  padding: 'clamp(3px, 1vw, 8px)',
                   cursor: 'pointer',
                   textAlign: 'center',
-                  fontSize: '0.75rem',
-                  fontWeight: '700',
+                  fontSize: 'clamp(0.6rem, 2.5vw, 0.8rem)',
+                  fontWeight: '800',
                   border: isMarked ? 'none' : '1px solid var(--glass-border)',
                   position: 'relative',
                   overflow: 'hidden',
+                  transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                  transform: isMarked ? 'scale(0.95)' : 'scale(1)',
+                  boxShadow: isMarked ? '0 8px 20px rgba(106, 17, 203, 0.4)' : 'var(--glass-shadow)',
                   userSelect: 'none',
-                  WebkitTapHighlightColor: 'transparent',
+                  WebkitTapHighlightColor: 'transparent'
                 }}
               >
-                {/* Background Image Effect */}
+                {/* Visual Restoration: Background Images */}
                 {song.imageUrl && !isMarked && (
                   <div style={{
-                    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                    position: 'absolute', inset: 0,
                     backgroundImage: `url(${song.imageUrl})`,
                     backgroundSize: 'cover', backgroundPosition: 'center',
-                    opacity: 0.15, borderRadius: 'inherit'
+                    opacity: 0.15, borderRadius: 'inherit', zIndex: 0
                   }} />
                 )}
                 
                 {isMarked && (
-                  <div style={{
-                    position: 'absolute', inset: 0,
+                  <div style={{ 
+                    position: 'absolute', inset: 0, 
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '2rem', opacity: 0.2, zIndex: 0,
+                    fontSize: 'clamp(1.5rem, 6vw, 2.5rem)', opacity: 0.25, zIndex: 0 
                   }}>✓</div>
                 )}
                 
@@ -412,52 +397,66 @@ export default function PlayerGame() {
                   display: '-webkit-box', 
                   WebkitBoxOrient: 'vertical', 
                   overflow: 'hidden',
-                  padding: '4px',
-                  textShadow: isMarked ? '0 1px 2px rgba(0,0,0,0.5)' : 'none'
-                }}>
-                  {song.name}
-                </div>
-                <div style={{ zIndex: 1, fontSize: '0.6rem', opacity: 0.8, fontWeight: '300' }}>
-                  {song.artist}
-                </div>
+                  textShadow: isMarked ? '0 1px 3px rgba(0,0,0,0.6)' : 'none',
+                  lineHeight: 1.2,
+                  width: '100%'
+                }}>{song.name}</div>
+                
+                <div style={{ 
+                  zIndex: 1, 
+                  fontSize: 'clamp(0.45rem, 2vw, 0.65rem)', 
+                  opacity: 0.8, 
+                  fontWeight: '300',
+                  marginTop: '2px',
+                  whiteSpace: 'nowrap',
+                  textOverflow: 'ellipsis',
+                  overflow: 'hidden',
+                  width: '90%'
+                }}>{song.artist}</div>
               </div>
             );
           })}
         </div>
 
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div style={{ display: 'flex', gap: '12px' }}>
           <button
-            onClick={claimLine}
-            className={(canClaimLine && !hasClaimedLine) ? 'claim-btn-pulse' : ''}
+            onClick={() => claimWin('LINE')}
+            disabled={hasClaimedLine || lineAttempts <= 0 || lineSubmitting}
+            className={(!hasClaimedLine && localLine) ? 'claim-btn-pulse' : ''}
             style={{ 
               flex: 1, 
-              padding: '15px', 
-              fontSize: '1.1rem',
-              borderRadius: '12px',
+              padding: '18px', 
+              fontSize: '1.2rem', 
+              fontWeight: '900',
+              borderRadius: '20px',
               border: 'none',
               color: 'white',
               cursor: (hasClaimedLine || lineAttempts <= 0) ? 'not-allowed' : 'pointer',
-              opacity: (hasClaimedLine || lineAttempts <= 0) ? 0.5 : 1,
-              background: (hasClaimedLine || lineAttempts <= 0) ? '#444' : 'linear-gradient(90deg, #ff8a00, #e52e71)',
-              transition: 'all 0.2s ease'
+              opacity: (hasClaimedLine || lineAttempts <= 0) ? 0.6 : 1,
+              background: (hasClaimedLine || lineAttempts <= 0) ? '#333' : 'linear-gradient(90deg, #ff8a00, #e52e71)',
+              boxShadow: (hasClaimedLine || lineAttempts <= 0) ? 'none' : '0 10px 25px rgba(229, 46, 113, 0.4)',
+              transition: 'all 0.3s ease'
             }}
           >
             {hasClaimedLine ? '✅ LÍNEA' : lineAttempts <= 0 ? '🚫 BLOQUEADO' : `📢 LÍNEA (${lineAttempts})`}
           </button>
           <button
-            onClick={claimBingo}
-            className={(canClaimBingo && !hasClaimedBingo) ? 'claim-btn-pulse' : ''}
+            onClick={() => claimWin('BINGO')}
+            disabled={hasClaimedBingo || bingoAttempts <= 0 || bingoSubmitting}
+            className={(!hasClaimedBingo && localBingo) ? 'claim-btn-pulse' : ''}
             style={{ 
-              flex: 1.2, 
-              padding: '15px', 
-              fontSize: '1.1rem',
-              borderRadius: '12px',
+              flex: 1.3, 
+              padding: '18px', 
+              fontSize: '1.2rem', 
+              fontWeight: '900',
+              borderRadius: '20px',
               border: 'none',
               color: 'white',
               cursor: (hasClaimedBingo || bingoAttempts <= 0) ? 'not-allowed' : 'pointer',
-              opacity: (hasClaimedBingo || bingoAttempts <= 0) ? 0.5 : 1,
-              background: (hasClaimedBingo || bingoAttempts <= 0) ? '#444' : 'linear-gradient(90deg, #ff007f, #ff8a00)',
-              transition: 'all 0.2s ease'
+              opacity: (hasClaimedBingo || bingoAttempts <= 0) ? 0.6 : 1,
+              background: (hasClaimedBingo || bingoAttempts <= 0) ? '#333' : 'linear-gradient(90deg, #ff007f, #ff8a00)',
+              boxShadow: (hasClaimedBingo || bingoAttempts <= 0) ? 'none' : '0 10px 25px rgba(255, 0, 127, 0.4)',
+              transition: 'all 0.3s ease'
             }}
           >
             {hasClaimedBingo ? '✅ BINGO' : bingoAttempts <= 0 ? '🚫 BLOQUEADO' : `🎉 BINGO (${bingoAttempts})`}
@@ -470,8 +469,18 @@ export default function PlayerGame() {
   if (gameState === 'GAME_OVER') {
     return (
       <div className="glass-panel" style={{ maxWidth: '500px', margin: '15vh auto', textAlign: 'center' }}>
-        <h1>GANADOR: {winner?.name} 🎉</h1>
-        <button onClick={() => navigate('/')} style={{ marginTop: '20px', width: '100%' }}>Volver al Inicio</button>
+        <h1 style={{ fontSize: 'clamp(2.5rem, 10vw, 4rem)', color: 'var(--accent-color)', fontWeight: '900' }}>
+          {winner?.socketId === socket.id ? '¡GANASTE! 🎉' : 'FIN DEL JUEGO'}
+        </h1>
+        <p style={{ fontSize: '1.5rem', marginTop: '1rem', opacity: 0.8 }}>
+          Ganador: <strong style={{ color: 'white' }}>{winner?.name}</strong>
+        </p>
+        <button 
+          onClick={() => navigate('/')} 
+          style={{ marginTop: '2.5rem', width: '100%', padding: '20px', fontSize: '1.3rem', fontWeight: '800' }}
+        >
+          Volver al Inicio
+        </button>
       </div>
     );
   }
