@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -116,6 +116,10 @@ export default function PresenterDashboard() {
   const [lineWinnerName, setLineWinnerName] = useState(null);
   const [spotifyWarning, setSpotifyWarning] = useState(null);
   const [presenterDisconnectedUntil, setPresenterDisconnectedUntil] = useState(null);
+  const connectedWaitingPlayers = useMemo(
+    () => players.filter((player) => player?.isConnected !== false),
+    [players]
+  );
 
   const persistSpotifySession = useCallback((response) => {
     if (!response?.access_token) return;
@@ -486,7 +490,9 @@ export default function PresenterDashboard() {
   };
 
   const handleStartGame = () => {
-    if (players.length === 0) return setError('Wait for at least 1 player to join');
+    if (connectedWaitingPlayers.length === 0) {
+      return setError('Wait for at least 1 connected player to join');
+    }
     socket.emit('startGame', { roomId, playlist: playlist.tracks });
   };
 
@@ -730,10 +736,10 @@ export default function PresenterDashboard() {
         </div>
         
         <div style={{ background: 'var(--glass-bg)', padding: '1.5rem', borderRadius: '15px', marginBottom: '2rem' }}>
-          <h3>Waiting Room ({players.length})</h3>
+          <h3>Waiting Room ({connectedWaitingPlayers.length})</h3>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center', marginTop: '1rem', minHeight: '50px' }}>
-            {players.length === 0 && <p style={{ color: 'var(--text-muted)' }}>Waiting for players to join...</p>}
-            {players.map(p => (
+            {connectedWaitingPlayers.length === 0 && <p style={{ color: 'var(--text-muted)' }}>Waiting for players to join...</p>}
+            {connectedWaitingPlayers.map(p => (
               <span key={p.id} style={{ background: 'var(--primary-color)', padding: '8px 15px', borderRadius: '50px' }}>{p.name}</span>
             ))}
           </div>

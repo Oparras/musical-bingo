@@ -38,6 +38,11 @@ class GameManager {
     }));
   }
 
+  getConnectedPlayers(room) {
+    if (!room || !Array.isArray(room.players)) return [];
+    return room.players.filter((player) => player.isConnected !== false);
+  }
+
   getPresenterState(room) {
     return {
       roomId: room.id,
@@ -98,13 +103,21 @@ class GameManager {
 
     if (this.persistenceEnabled) {
       try {
+        await supabase
+          .from('players')
+          .delete()
+          .eq('room_id', roomId);
+
         const { error } = await supabase
           .from('rooms')
           .upsert({ 
             id: roomId, 
             status: 'WAITING', 
             host_id: presenterSocketId,
-            line_locked: false 
+            line_locked: false,
+            playlist_data: [],
+            played_songs_ids: [],
+            current_song: null
           });
         if (error) console.error('Supabase Error (createRoom):', error.message);
       } catch (err) {
@@ -374,6 +387,11 @@ class GameManager {
     const room = this.rooms.get(roomId);
     if (!room) return { error: 'Room not found' };
 
+    const connectedPlayers = this.getConnectedPlayers(room);
+    if (connectedPlayers.length === 0) {
+      return { error: 'Wait for at least 1 connected player to join' };
+    }
+
     room.status = 'PLAYING';
     room.playlist = playlist;
     room.playedSongs = [];
@@ -383,7 +401,7 @@ class GameManager {
     
     // Generate unique cards for all players
     const updates = [];
-    room.players.forEach(player => {
+    connectedPlayers.forEach(player => {
       try {
         player.card = generateBingoCard(playlist, 16);
         if (this.persistenceEnabled) {
